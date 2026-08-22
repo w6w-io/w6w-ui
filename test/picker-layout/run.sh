@@ -51,10 +51,13 @@ PW_IMAGE="${PW_IMAGE:-mcr.microsoft.com/playwright:v${PW_VERSION}-noble}"
 # Plus C1-C4 — the Functions/Workflows tabs (D-12/D-15): sidebar order/
 # position, both tabs minting the SAME `@w6w/call` step shape via a REAL
 # onAdd (not a discarding stub), and their absence under `appsOnly`.
+# Plus (T1.1.1) I10-I13 — the multi-column card grid's geometry, its
+# narrow-viewport collapse, and the opt-in category-filter chip row's
+# interaction and bounded collapse, on the real components' real DOM.
 # The verdict below is REFUSED unless exactly this many ran: a tree that
 # fails to bundle, or a run that dies half-way, reports DID NOT RUN rather
 # than "0 failures".
-EXPECTED_TESTS="${EXPECTED_TESTS:-17}"
+EXPECTED_TESTS="${EXPECTED_TESTS:-21}"
 
 fatal() {
   echo "FATAL: $*"

@@ -27,17 +27,48 @@ const TREQ0 = params.get("treq") === "0";
 // project's contract, that must render `Connected apps`/`Apps`/`AI` but NOT
 // `Functions`/`Workflows`.
 const APPS_ONLY = params.get("appsOnly") === "1";
+// T1.1.1 I13: override into exactly N distinct round-robin category slugs
+// (cat0..catN-1), so the category-chip row's collapse budget can be driven
+// past its threshold. Independent of NOAI/the `ai`-membership rule below —
+// no existing test passes both, and this one is only ever driven with `cats`
+// set on its own.
+const CATS = Number(params.get("cats") || "0");
 // Selects which real component to mount. Seeded into the page HTML as
 // `window.__V__` before this bundle runs (mirrors the discovery rig's `?v=`) —
 // one surface per page load, never both, so the two <dialog>s never stack in
 // the browser's top layer.
 const surface = (window as any).__V__ === "add" ? "add" : "step";
 
-// Mixed catalog: every 3rd vendor app carries `categories: ["ai"]`, so the AI
-// tab and the Apps tab are provably different subsets of the same list (I7),
-// and a substring search ("App 1") can tell an alphabetical sort apart from a
-// numeric one. Plus one reserved `@w6w/*` id that must never surface in any
-// picker even when it is "connected" (the internal-exclusion probe for I8c).
+// Category assignment for app `i`. Two independent knobs:
+//
+//   - `cats=<N>` (T1.1.1 I13 — see CATS above): exactly N distinct round-robin
+//     slugs, one per app. Only ever driven on its own (v=add, no NOAI/ai
+//     assertion depends on it), so it does not need to preserve the `ai`
+//     rule below.
+//   - default (no `cats`): every 3rd vendor app carries "ai" — UNCHANGED from
+//     before this project (I7 and I8's "App 1"/"9" search-order cases
+//     hardcode exactly which app indices land in the AI tab off this rule,
+//     `i % 3 === 0`), now layered with a THIRD slug ("productivity") on the
+//     two-thirds that don't carry "ai", and a SECOND slug ("crm") added
+//     ALONGSIDE "ai" (never replacing it) on every 9th app — so the default
+//     fixture carries >= 3 distinct category slugs and >= 1 two-category app
+//     (T1.1.1 A10) without moving a single index in or out of the "ai" tab.
+function catsFor(i: number): string[] {
+  if (CATS > 0) return [`cat${i % CATS}`];
+  if (NOAI) {
+    if (i % 5 === 0) return ["crm", "productivity"];
+    return i % 3 === 0 ? ["crm"] : i % 3 === 1 ? ["productivity"] : ["support"];
+  }
+  if (i % 3 === 0) return i % 9 === 0 ? ["ai", "crm"] : ["ai"];
+  return i % 3 === 1 ? ["crm"] : ["productivity"];
+}
+
+// Mixed catalog: every 3rd vendor app carries "ai" (see `catsFor` above), so
+// the AI tab and the Apps tab are provably different subsets of the same
+// list (I7), and a substring search ("App 1") can tell an alphabetical sort
+// apart from a numeric one. Plus one reserved `@w6w/*` id that must never
+// surface in any picker even when it is "connected" (the internal-exclusion
+// probe for I8c).
 function apps(n: number) {
   const out: Array<{ id: string; displayName: string; version: string; categories: string[] }> =
     [];
@@ -46,7 +77,7 @@ function apps(n: number) {
       id: `vendor-app-${i}`,
       displayName: `App ${i}`,
       version: "1.0.0",
-      categories: !NOAI && i % 3 === 0 ? ["ai"] : ["crm"],
+      categories: catsFor(i),
       ...(TREQ0 ? { testRequired: false } : {}),
     });
   }
@@ -55,7 +86,7 @@ function apps(n: number) {
       id: "@w6w/http",
       displayName: "HTTP",
       version: "1.0.0",
-      categories: NOAI ? ["crm"] : ["ai"],
+      categories: CATS > 0 ? ["cat0"] : NOAI ? ["crm"] : ["ai"],
     });
   }
   return out;

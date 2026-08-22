@@ -1963,6 +1963,79 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   min-width: 0;
 }
 
+/* AppPicker's own multi-column card grid (T1.1.1). ADDITIVE on top of the
+   shared `.w6w-stepbuilder-list`/`-item` above, which stay byte-identical to
+   `main` (NodeList/CallableRow/ReadyToUseFlow still consume them unmodified)
+   — this rule wins the cascade purely by being declared later at equal
+   (single-class) specificity. `minmax(190px, 1fr)` is re-derived for this
+   card's much shorter content (icon + name + id, not a full description
+   card) from the scale `packages/frontend`'s generic `.grid` utility uses
+   (`minmax(260px, 1fr)`) — `grid-template-columns` is box geometry, outside
+   `lint:tokens`' scanned property set, so the literal is deliberate, not an
+   oversight. */
+.w6w-apppicker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--w6w-sp-2);
+}
+
+/* The quieter resting card (D-3): `--w6w-panel` at rest instead of
+   `--w6w-panel-2`, shifting TO `--w6w-panel-2` on hover/focus — the inverse
+   of the shared item's flat `--w6w-panel-2` always-on tint. No new token;
+   `.w6w-stepbuilder-item:hover`'s `border-color: var(--w6w-accent)` above
+   still applies unchanged, so hover keeps both effects together. Slightly
+   tighter padding than the shared item, sized for a narrower multi-column
+   card rather than a single full-width row. */
+.w6w-apppicker-card {
+  background: var(--w6w-panel);
+  padding: var(--w6w-sp-2) var(--w6w-sp-2-5);
+}
+
+.w6w-apppicker-card:hover,
+.w6w-apppicker-card:focus-visible {
+  background: var(--w6w-panel-2);
+}
+
+/* The opt-in category-filter chip row (D-1a; AddConnectionModal only —
+   `AppPickerProps.categoryFilter`). Extends `.w6w-chip`'s look
+   (`_multiselect.scss:40-53`) for the general shape rather than importing
+   it — that partial belongs to `ParamsForm`'s array-editor chips, a
+   different feature with the opposite interaction (only SELECTED values are
+   chips there; every available category is always a chip here). */
+.w6w-apppicker-cats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--w6w-sp-1-5);
+}
+
+.w6w-apppicker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--w6w-sp-0-5);
+  background: var(--w6w-panel);
+  border: 1px solid var(--w6w-border);
+  border-radius: 999px;
+  padding: var(--w6w-sp-0-5) var(--w6w-sp-2);
+  color: var(--w6w-muted);
+  font-size: var(--w6w-fs-xs);
+  cursor: pointer;
+}
+
+.w6w-apppicker-chip:hover {
+  border-color: var(--w6w-accent);
+  color: var(--w6w-text);
+}
+
+/* The pressed/selected state is driven by the same `aria-pressed` the
+   button already carries for assistive tech (P10) — no separate class to
+   keep in sync with it. */
+.w6w-apppicker-chip[aria-pressed=true] {
+  background: var(--w6w-accent);
+  border-color: var(--w6w-accent);
+  color: #fff;
+}
+
 /* AppPicker's own layout owner, nested inside `.w6w-stepbuilder-content` (never
    applied in its place — see the call sites). A flex item's automatic minimum
    size is its min-content size unless `overflow` is non-`visible` or
