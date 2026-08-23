@@ -2643,6 +2643,167 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
 /* Read-only syntax-highlighted display (`<CodeBlock>`). The colours come from
    the `--w6w-code-*` tokens via inline styles Prism sets, so this rule only
    owns box, rhythm and overflow. */
+.w6w-history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--w6w-sp-2);
+  width: 100%;
+}
+
+/* One positioned container shared by both lanes AND the axis, so every
+   `left`/`width` percentage in any of the three is on the same coordinate
+   system — this is what keeps the two series from drifting apart. */
+.w6w-history-plot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--w6w-sp-1);
+}
+
+.w6w-history-lane {
+  position: relative;
+  height: 22px;
+  min-width: 0;
+}
+
+/* --- execution lane -------------------------------------------------- */
+.w6w-history-cell {
+  --w6w-health-color: var(--w6w-health-unknown);
+  --w6w-history-fill: 100%;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 1px;
+  border-radius: 2px;
+  overflow: hidden;
+  /* The unfilled remainder of the cell, so the lane reads as a continuous
+     row rather than as floating marks — same treatment as `UptimeStrip`. */
+  background: color-mix(in srgb, var(--w6w-border) 55%, transparent);
+}
+
+.w6w-history-cell::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--w6w-history-fill);
+  border-radius: inherit;
+  background: var(--w6w-health-color);
+}
+
+.w6w-history-cell-ok {
+  --w6w-health-color: var(--w6w-health-ok);
+  --w6w-history-fill: 35%;
+}
+
+.w6w-history-cell-degraded {
+  --w6w-health-color: var(--w6w-health-degraded);
+  --w6w-history-fill: 65%;
+}
+
+.w6w-history-cell-down {
+  --w6w-health-color: var(--w6w-health-down);
+  --w6w-history-fill: 100%;
+}
+
+.w6w-history-cell-unknown {
+  --w6w-health-color: var(--w6w-health-unknown);
+  --w6w-history-fill: 100%;
+}
+
+/* No solid fill for `unknown` — a hatch, same reasoning as `UptimeStrip`'s:
+   an unmeasured day must never be mistaken for a healthy or a failing one. */
+.w6w-history-cell-unknown::after {
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--w6w-health-color) 45%, transparent) 0 2px, transparent 2px 5px);
+  border: 1px solid color-mix(in srgb, var(--w6w-health-color) 35%, var(--w6w-border));
+}
+
+/* --- vendor lane ------------------------------------------------------- */
+.w6w-history-bar {
+  --w6w-health-color: var(--w6w-health-unknown);
+  position: absolute;
+  /* Thickness is the geometry half of severity — thin for `ok`, thicker for
+     `degraded`, full lane height for `down`/`unknown` — using the spacing
+     scale rather than a one-off literal so it never drifts from it. */
+  top: var(--w6w-sp-1);
+  bottom: var(--w6w-sp-1);
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--w6w-health-color);
+}
+
+.w6w-history-bar-ok {
+  --w6w-health-color: var(--w6w-health-ok);
+}
+
+.w6w-history-bar-degraded {
+  --w6w-health-color: var(--w6w-health-degraded);
+  top: var(--w6w-sp-0-5);
+  bottom: var(--w6w-sp-0-5);
+}
+
+.w6w-history-bar-down {
+  --w6w-health-color: var(--w6w-health-down);
+  top: 0;
+  bottom: 0;
+}
+
+.w6w-history-bar-unknown {
+  --w6w-health-color: var(--w6w-health-unknown);
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--w6w-health-color) 45%, transparent) 0 2px, transparent 2px 5px);
+  border: 1px solid color-mix(in srgb, var(--w6w-health-color) 35%, var(--w6w-border));
+}
+
+/* A clipped edge is squared off rather than rounded, so a bar that runs off
+   the window reads as continuing beyond it rather than as ending there. */
+.w6w-history-bar-clip-start {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.w6w-history-bar-clip-end {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.w6w-history-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  color: var(--w6w-muted);
+  font-size: var(--w6w-fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- axis --------------------------------------------------------------- */
+.w6w-history-axis {
+  position: relative;
+  height: 16px;
+}
+
+.w6w-history-tick {
+  position: absolute;
+  top: 0;
+  color: var(--w6w-muted);
+  font-size: var(--w6w-fs-xs);
+  line-height: var(--w6w-lh-normal);
+  white-space: nowrap;
+}
+
+.w6w-history-tick-start {
+  transform: translateX(0);
+}
+
+.w6w-history-tick-end {
+  transform: translateX(-100%);
+}
+
 .w6w-code-block {
   background: var(--w6w-panel-2);
   border: 1px solid var(--w6w-border);

@@ -54,6 +54,13 @@ export type { ApiCallsPanelProps } from "./components/ApiCallsPanel.tsx";
 export { UptimeStrip } from "./components/UptimeStrip.tsx";
 export type { UptimeCellState, UptimeDay, UptimeStripProps } from "./components/UptimeStrip.tsx";
 
+export { HistoryTimeline } from "./components/HistoryTimeline.tsx";
+export type {
+  HistoryTimelineProps,
+  HistoryWindow,
+  VendorIncidentBar,
+} from "./components/HistoryTimeline.tsx";
+
 export { ExpressionInput } from "./components/ExpressionInput.tsx";
 export type { ExpressionInputProps } from "./components/ExpressionInput.tsx";
 
