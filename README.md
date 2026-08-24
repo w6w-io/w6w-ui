@@ -76,6 +76,25 @@ import "@w6w/ui/code.css";
 
 The same `--w6w-*` namespace also carries a spacing and typography scale — the `--w6w-sp-*` / `--w6w-fs-*` / `--w6w-font-*` families (plus `--w6w-fw-*` weights and `--w6w-lh-*` line-heights), overridable the same way. See [`docs/design-system.md`](docs/design-system.md) for the full ramp, the half-step rule, and how to run the `lint:tokens` gate that keeps new code on it.
 
+### Light/dark mode
+
+Every color token above ships in both a light and a dark variant; without any
+override, `@w6w/ui` picks between them by following the visitor's OS
+`prefers-color-scheme` — which is **independent of whatever theme your own
+app is using**. If you're embedding these components inside a host app that
+has its own theme, pass it explicitly:
+
+```tsx
+<W6WUIProvider api={api} theme="light">
+  <YourApp />
+</W6WUIProvider>
+```
+
+Omit it and `@w6w/ui` may render in a different mode than the page around
+it. See [`docs/theming.md`](docs/theming.md) for the full resolution order
+and why this trips up embedders specifically (not studio, which manages
+`data-theme` itself).
+
 ### Where the styles come from
 
 The stylesheet is authored in **Sass**: `src/styles.scss` is the entry point and `src/styles/*.scss`

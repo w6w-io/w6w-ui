@@ -6,8 +6,12 @@
  *
  *   const api = createW6WApi({ baseUrl: "/api", token });
  *   <W6WUIProvider api={api}>...</W6WUIProvider>
+ *
+ * Embedding inside a host app that has its own theme? Pass `theme` too — see
+ * this file's `W6WUIProviderProps.theme` doc and `docs/theming.md`.
  */
 import { type ReactNode, createContext, useContext } from "react";
+import { ProvidedThemeCtx } from "./theme.ts";
 import type {
   ActionDef,
   ApiCallRecord,
@@ -17,6 +21,7 @@ import type {
   FunctionDetail,
   FunctionSummary,
   SavedTest,
+  ThemeMode,
   WorkflowDetail,
   WorkflowSummary,
 } from "./types.ts";
@@ -291,12 +296,51 @@ const Ctx = createContext<W6WApi | null>(null);
 
 export interface W6WUIProviderProps {
   api: W6WApi;
+  /**
+   * Force the theme every `@w6w/ui` component resolves to — both the CSS
+   * tokens (`styles.css`'s `:where([data-theme=...])` blocks) and the
+   * JS-side theme-aware components (`AppIcon`, `CodeEditor`, `JsonEditor`,
+   * `WorkflowFlowEditor`, via `useEffectiveTheme`) — instead of each one
+   * independently falling back to `data-theme` on `<html>` or the visitor's
+   * OS `prefers-color-scheme`.
+   *
+   * Omit to keep that pre-existing default — the right choice for `@w6w/ui`'s
+   * own app (studio), which already manages `data-theme` on `<html>` itself.
+   * But it's a silent trap for a HOST embedding these components inside its
+   * own page: without this prop, `@w6w/ui` resolves its theme from the
+   * visitor's OS setting, independently of whatever theme the host's own
+   * page is using — a visitor with a dark-mode OS preference gets `@w6w/ui`
+   * components rendered in ITS dark palette sitting inside an otherwise-light
+   * host page (or vice versa). Pass your host's own resolved theme here to
+   * make `@w6w/ui` follow it instead. See `docs/theming.md`.
+   */
+  theme?: ThemeMode;
   children: ReactNode;
 }
 
-/** Provides the w6w API client to every component under it. */
-export function W6WUIProvider({ api, children }: W6WUIProviderProps) {
-  return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
+/**
+ * Provides the w6w API client to every component under it, and — when
+ * `theme` is given — forces `@w6w/ui`'s theme to match it (see
+ * `W6WUIProviderProps.theme` above). Setting `theme` wraps `children` in a
+ * `data-theme` DOM node: CSS custom properties cascade to every descendant
+ * regardless of specificity, so this alone is enough for every `@w6w/ui`
+ * stylesheet rule to resolve correctly — no need to also set the attribute
+ * on `<html>` yourself. `display: contents` keeps that wrapper invisible to
+ * layout (flex/grid gap, `:nth-child`, etc. all behave as if it weren't
+ * there).
+ */
+export function W6WUIProvider({ api, theme, children }: W6WUIProviderProps) {
+  const content = (
+    <Ctx.Provider value={api}>
+      <ProvidedThemeCtx.Provider value={theme}>{children}</ProvidedThemeCtx.Provider>
+    </Ctx.Provider>
+  );
+  if (!theme) return content;
+  return (
+    <div data-theme={theme} style={{ display: "contents" }}>
+      {content}
+    </div>
+  );
 }
 
 /**
