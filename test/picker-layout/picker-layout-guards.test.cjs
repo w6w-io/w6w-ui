@@ -23,6 +23,9 @@ const VP = {
   wide: { width: 1440, height: 900 },
   med: { width: 1280, height: 720 },
   short: { width: 1440, height: 620 },
+  // T1.1.1 I11: the narrow case the grid's `auto-fit` collapse is measured
+  // against — no VP entry here was ever under 1280px wide before this.
+  narrow: { width: 480, height: 800 },
 };
 
 const HTML = (v) => `<!doctype html><html><head><meta charset="utf-8">
@@ -102,6 +105,42 @@ const searchCount = (page) =>
 
 const bodyText = (page) =>
   page.evaluate(() => document.body.textContent.replace(/\s+/g, " ").trim());
+
+// T1.1.1 — the card-grid + category-filter helpers (I10-I13).
+const cardsPerRow = (page) =>
+  page.evaluate(() => {
+    const cards = [...document.querySelectorAll(".w6w-apppicker-card")].map((c) =>
+      c.getBoundingClientRect(),
+    );
+    if (cards.length === 0) return 0;
+    const tops = cards.map((c) => Math.round(c.top));
+    const minTop = Math.min(...tops);
+    return tops.filter((t) => t === minTop).length;
+  });
+
+const cardWidths = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll(".w6w-apppicker-card")].map((c) =>
+      Math.round(c.getBoundingClientRect().width),
+    ),
+  );
+
+// The seeded fixture names every card "App {i}" (harness-entry.tsx) — parsed
+// back out here so a filter's RESULT can be checked against the fixture's own
+// category rule, not just counted.
+const cardIndices = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll(".w6w-apppicker-card strong")].map((el) =>
+      Number(el.textContent.replace("App ", "")),
+    ),
+  );
+
+const clickChip = (page, label) =>
+  page.evaluate((l) => {
+    const b = document.querySelector(`.w6w-apppicker-chip[aria-label="Filter by ${l}"]`);
+    if (!b) throw new Error(`no category chip labelled "${l}"`);
+    b.click();
+  }, label);
 
 let browser;
 before(async () => {
@@ -366,12 +405,17 @@ test("I4 — host height is identical across all four AppPicker render paths", a
   }
 });
 
-// ── I5 — the step builder's Apps-tab panel is wide, not the 152/148 the
-//    rejected "replace" form collapses to; and (folded in from TA1's eval)
-//    the SAME panel width holds on the Triggers tab — the structural property
-//    that the host stays nested inside .w6w-stepbuilder-content rather than
-//    becoming it. ─────────────────────────────────────────────────────────
-test("I5 — step-builder Apps-tab panel/item width floors, and Apps == Triggers panel width", async () => {
+// ── I5 — the step builder's Apps-tab panel stays wide — not the 152/148 the
+//    rejected "replace" form collapses to, still guarded by the SAME
+//    `contentApps.width >= 500` floor below as before this project — and
+//    (folded in from TA1's eval) the SAME panel width holds on the Triggers
+//    tab, the structural property that the host stays nested inside
+//    .w6w-stepbuilder-content rather than becoming it. New for the grid
+//    layout (T1.1.1): the panel now holds several cards side by side, so the
+//    per-card floor drops from "one card fills the panel" (480px) to a much
+//    smaller per-card minimum, PLUS a column-count assertion that a grid
+//    with only one column per row would fail. ──────────────────────────────
+test("I5 — step-builder Apps-tab panel width floor, per-card floor + multi-column row, and Apps == Triggers panel width", async () => {
   const page = await open(browser, { v: "step", q: "n=60&conn=5", vp: VP.wide });
   await clickTab(page, "Apps");
   await page.waitForTimeout(150);
@@ -383,7 +427,12 @@ test("I5 — step-builder Apps-tab panel/item width floors, and Apps == Triggers
     contentApps.width >= 500,
     `Apps-tab .w6w-stepbuilder-content width ${contentApps.width} < 500 floor`,
   );
-  assert.ok(item.width >= 480, `app-row button width ${item.width} < 480 floor`);
+  assert.ok(item.width >= 160, `app-row card width ${item.width} < 160 floor`);
+  const firstRowCount = await cardsPerRow(page);
+  assert.ok(
+    firstRowCount > 1,
+    `Apps-tab first grid row holds ${firstRowCount} card(s), expected > 1 (grid must render multiple columns)`,
+  );
   // The floors above are absolute numbers, so a host forced to some fixed
   // width that still clears them (e.g. 550px, or 900px — wider than its own
   // container) survives undetected. Float the panel against its OWN
@@ -608,6 +657,278 @@ test("I9 — the home tab's error/loading paths stay hosted and nested", async (
     );
     await page.close();
   }
+});
+
+// ── I10 — grid geometry, both surfaces: display:grid, a first row that
+//    actually holds several cards (not a single-column list wearing a grid
+//    class), every card clearing a floor and staying under the grid's own
+//    width, and I2's scroll-ownership invariant surviving the layout change
+//    at the same n=60 that exercises it. ────────────────────────────────────
+test("I10 — grid geometry: display:grid, first-row card count, per-card floor, scroll ownership, both surfaces", async () => {
+  for (const [v, q, tabAfter, minCols] of [
+    ["add", "n=60", null, 3],
+    ["step", "n=60&conn=5", "Apps", 2],
+  ]) {
+    const page = await open(browser, { v, q, vp: VP.wide });
+    if (tabAfter) {
+      await clickTab(page, tabAfter);
+      await page.waitForTimeout(150);
+    }
+    const display = await page.evaluate(
+      () => getComputedStyle(document.querySelector(".w6w-stepbuilder-list")).display,
+    );
+    assert.equal(
+      display,
+      "grid",
+      `${v}: .w6w-stepbuilder-list computed display is "${display}", expected "grid"`,
+    );
+
+    const listWidth = (await rect(page, ".w6w-stepbuilder-list")).width;
+    const firstRow = await cardsPerRow(page);
+    assert.ok(
+      firstRow >= minCols,
+      `${v}: first grid row holds ${firstRow} card(s), expected >= ${minCols}`,
+    );
+    const widths = await cardWidths(page);
+    assert.ok(widths.length > 0, `${v}: no .w6w-apppicker-card rendered`);
+    for (const w of widths) {
+      assert.ok(w >= 160, `${v}: a card width ${w} < 160 floor`);
+      assert.ok(w < listWidth, `${v}: a card width ${w} >= the grid's own width ${listWidth}`);
+    }
+
+    // I2's own invariant, unchanged by the grid, re-asserted here at the
+    // exact n=60 this test already loaded.
+    const listOv = await overflow(page, ".w6w-stepbuilder-scroll");
+    const hostOv = await overflow(page, ".w6w-apppicker-host");
+    assert.ok(listOv > 0, `${v}: .w6w-stepbuilder-scroll must still overflow at n=60, got ${listOv}`);
+    assert.equal(hostOv, 0, `${v}: .w6w-apppicker-host must not overflow, got ${hostOv}`);
+
+    if (v === "add") {
+      await page.screenshot({ path: "/w/apppicker-grid-add-wide.png" });
+    }
+    await page.close();
+  }
+});
+
+// ── I11 — narrow-viewport collapse: the add-connection grid degrades to
+//    fewer columns (never zero, never horizontally scrolling) rather than
+//    overflowing sideways, at a width no VP entry exercised before this
+//    project. ─────────────────────────────────────────────────────────────
+test("I11 — narrow viewport collapses to fewer columns than wide, without horizontal scroll", async () => {
+  const widePage = await open(browser, { v: "add", q: "n=60", vp: VP.wide });
+  const wideCols = await cardsPerRow(widePage);
+  await widePage.close();
+  assert.ok(wideCols > 1, `VP.wide must render more than one column to begin with, got ${wideCols}`);
+
+  const narrowPage = await open(browser, { v: "add", q: "n=60", vp: VP.narrow });
+  const narrowCols = await cardsPerRow(narrowPage);
+  const scroll = await narrowPage.evaluate(() => {
+    const el = document.querySelector(".w6w-apppicker-host");
+    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+  });
+  await narrowPage.screenshot({ path: "/w/apppicker-grid-add-narrow.png" });
+  await narrowPage.close();
+
+  assert.ok(narrowCols >= 1, `narrow: first row card count ${narrowCols}, expected >= 1`);
+  assert.ok(
+    narrowCols < wideCols,
+    `narrow: first row card count ${narrowCols} not < VP.wide's ${wideCols}`,
+  );
+  assert.ok(
+    scroll.scrollWidth <= scroll.clientWidth + 1,
+    `narrow: .w6w-apppicker-host scrolls horizontally (scrollWidth ${scroll.scrollWidth} > clientWidth ${scroll.clientWidth})`,
+  );
+});
+
+// ── I12 — category-chip filter interaction, add surface only: real
+//    <button aria-pressed> chips, single-select narrowing, two-select union,
+//    toggle-off, and an explicit clear path back to the unfiltered catalog.
+//    The step builder's Apps tab (categoryFilter off, D-2) must render zero
+//    chips throughout. Uses the DEFAULT fixture (no `cats=`), where "ai" is
+//    exactly `i % 3 === 0` and "productivity" is exactly `i % 3 === 2`, two
+//    disjoint, single-category subsets — so "every remaining card belongs to
+//    the selected chip" is checkable against the fixture's own rule, not
+//    just counted. ────────────────────────────────────────────────────────
+test("I12 — category-chip filter interaction: narrow/union/toggle-off/clear, add surface; zero chips on step's Apps tab", async () => {
+  const page = await open(browser, { v: "add", q: "n=60", vp: VP.wide });
+  const chipInfo = await page.evaluate(() =>
+    [...document.querySelectorAll(".w6w-apppicker-chip")].map((b) => ({
+      tag: b.tagName,
+      type: b.getAttribute("type"),
+      pressed: b.getAttribute("aria-pressed"),
+      label: b.getAttribute("aria-label"),
+    })),
+  );
+  assert.ok(chipInfo.length > 0, "add surface must render at least one category chip");
+  for (const c of chipInfo) {
+    assert.equal(c.tag, "BUTTON", `chip must be a real <button>, got ${c.tag}`);
+    assert.equal(c.type, "button", `chip button must be type="button", got ${c.type}`);
+    assert.ok(
+      c.pressed === "true" || c.pressed === "false",
+      `chip aria-pressed must be "true"/"false", got ${c.pressed}`,
+    );
+    assert.ok(c.label && c.label.length > 0, "chip must carry a non-empty aria-label");
+  }
+
+  const unfiltered = await cardIndices(page);
+  assert.equal(unfiltered.length, 60, `add surface must start with the full 60-app catalog, got ${unfiltered.length}`);
+
+  await clickChip(page, "Productivity");
+  await page.waitForTimeout(100);
+  const onlyA = await cardIndices(page);
+  assert.equal(onlyA.length, 20, `Productivity-only filter -> ${onlyA.length} cards, expected 20`);
+  assert.ok(
+    onlyA.every((i) => i % 3 === 2),
+    `every remaining card must belong to Productivity: ${JSON.stringify(onlyA)}`,
+  );
+
+  await clickChip(page, "AI");
+  await page.waitForTimeout(100);
+  const union = await cardIndices(page);
+  assert.equal(union.length, 40, `Productivity+AI union -> ${union.length} cards, expected 40`);
+  assert.ok(union.length >= onlyA.length, "union count must be >= the single-chip count");
+  assert.ok(union.length <= unfiltered.length, "union count must be <= the unfiltered count");
+  assert.ok(
+    union.every((i) => i % 3 === 2 || i % 3 === 0),
+    `union must be exactly Productivity ∪ AI: ${JSON.stringify(union)}`,
+  );
+
+  await clickChip(page, "Productivity");
+  await page.waitForTimeout(100);
+  const onlyB = await cardIndices(page);
+  assert.equal(
+    onlyB.length,
+    20,
+    `AI-only (after de-selecting Productivity) -> ${onlyB.length} cards, expected 20`,
+  );
+  assert.ok(
+    onlyB.every((i) => i % 3 === 0),
+    `every remaining card must belong to AI: ${JSON.stringify(onlyB)}`,
+  );
+
+  const cleared = await page.evaluate(() => {
+    const b = [...document.querySelectorAll(".w6w-apppicker-cats button")].find(
+      (x) => x.textContent.trim() === "Clear",
+    );
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  assert.ok(cleared, 'no "Clear" control found to reset the category selection');
+  await page.waitForTimeout(100);
+  const afterClear = await cardIndices(page);
+  assert.equal(
+    afterClear.length,
+    60,
+    `after Clear, expected the full 60-app catalog, got ${afterClear.length}`,
+  );
+  await page.close();
+
+  // categoryFilter is off at every StepBuilderModal call site (D-2) — the
+  // Apps tab must render zero chips, ever.
+  const stepPage = await open(browser, { v: "step", q: "n=60&conn=5", vp: VP.wide });
+  await clickTab(stepPage, "Apps");
+  await stepPage.waitForTimeout(150);
+  const stepChips = await stepPage.evaluate(
+    () => document.querySelectorAll(".w6w-apppicker-chip").length,
+  );
+  assert.equal(stepChips, 0, `step builder's Apps tab must render zero category chips, got ${stepChips}`);
+  await stepPage.close();
+});
+
+// ── I13 — the chip row's bounded collapse (D-1a: a fixed budget + "+N more",
+//    any selected chip stays visible while collapsed) and A7's combined
+//    category+search empty state, whose clear control must restore the full,
+//    unfiltered grid. `cats=12` seeds exactly 12 distinct slugs — above the
+//    picker's collapse budget — via harness-entry.tsx's CATS override. ─────
+test("I13 — bounded chip collapse + combined category+search empty state, add surface", async () => {
+  const page = await open(browser, { v: "add", q: "n=60&cats=12", vp: VP.wide });
+  const collapsedCount = await page.evaluate(
+    () => document.querySelectorAll(".w6w-apppicker-chip").length,
+  );
+  assert.ok(
+    collapsedCount < 12,
+    `collapsed chip count ${collapsedCount} must be < 12 (the fixture's full slug count)`,
+  );
+
+  const moreClicked = await page.evaluate(() => {
+    const b = [...document.querySelectorAll(".w6w-apppicker-cats button")].find((x) =>
+      /^\+\d+ more$/.test(x.textContent.trim()),
+    );
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  assert.ok(moreClicked, `no "+N more" toggle found with ${collapsedCount} of 12 chips shown`);
+  await page.waitForTimeout(100);
+
+  const expandedCount = await page.evaluate(
+    () => document.querySelectorAll(".w6w-apppicker-chip").length,
+  );
+  assert.equal(expandedCount, 12, `expanded chip count ${expandedCount}, expected all 12`);
+  const hostOvAfterExpand = await overflow(page, ".w6w-apppicker-host");
+  assert.equal(
+    hostOvAfterExpand,
+    0,
+    `.w6w-apppicker-host must not overflow after expanding chips, got ${hostOvAfterExpand}`,
+  );
+  const rowAfterExpand = await cardsPerRow(page);
+  assert.ok(
+    rowAfterExpand >= 1,
+    `grid must still show at least one full card row after expanding chips, got ${rowAfterExpand} in the first row`,
+  );
+
+  // Select the LAST chip (only reachable while expanded — beyond the
+  // collapse budget), then collapse again: it must stay rendered (P5).
+  const lastLabel = await page.evaluate(() => {
+    const chips = [...document.querySelectorAll(".w6w-apppicker-chip")];
+    const last = chips[chips.length - 1];
+    return last ? last.getAttribute("aria-label").replace("Filter by ", "") : null;
+  });
+  assert.ok(lastLabel, "no chip label found to select for the pin-while-collapsed check");
+  await clickChip(page, lastLabel);
+  await page.waitForTimeout(100);
+
+  const lessClicked = await page.evaluate(() => {
+    const b = [...document.querySelectorAll(".w6w-apppicker-cats button")].find(
+      (x) => x.textContent.trim() === "Show less",
+    );
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  assert.ok(lessClicked, 'no "Show less" toggle found to collapse the chip row again');
+  await page.waitForTimeout(100);
+
+  const stillPinned = await page.evaluate(
+    (l) => !!document.querySelector(`.w6w-apppicker-chip[aria-label="Filter by ${l}"]`),
+    lastLabel,
+  );
+  assert.ok(stillPinned, `selected chip "${lastLabel}" must stay rendered after collapsing again`);
+
+  // A7: category selection + non-matching search -> the combined empty
+  // message (naming both), and its clear control restores the full grid.
+  await page.fill(".w6w-stepbuilder-search", "zzz-does-not-exist");
+  await page.waitForTimeout(150);
+  const emptyText = await bodyText(page);
+  assert.ok(
+    /selected categor/i.test(emptyText) && emptyText.includes("zzz-does-not-exist"),
+    `combined empty-state message must name both the search AND the category selection: "${emptyText}"`,
+  );
+
+  const clearedBoth = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => x.textContent.trim() === "Clear filters",
+    );
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  assert.ok(clearedBoth, 'no "Clear filters" control found in the combined empty state');
+  await page.waitForTimeout(150);
+  const restored = await cardIndices(page);
+  assert.equal(restored.length, 60, `after clearing, expected the full 60-app catalog, got ${restored.length}`);
+  await page.close();
 });
 
 // ── M-xl — the -xl size modifier actually applies. `dialog.w6w-modal`

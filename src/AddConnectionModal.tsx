@@ -113,6 +113,7 @@ export function AddConnectionModal(props: AddConnectionModalProps) {
           onSelectApp={setSelectedApp}
           theme={props.theme}
           searchPlaceholder="Search apps to connect…"
+          categoryFilter
         />
       </div>
     </Modal>
