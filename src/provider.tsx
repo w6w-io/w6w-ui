@@ -141,7 +141,8 @@ export interface W6WApi {
    * such reference resolves to the empty string.
    *
    * `apiCalls` carries the outbound HTTP calls the action made (redacted); a
-   * failed invoke rejects with an `ApiError` whose `body` holds the same field.
+   * failed invoke rejects with an `ApiError` whose `body ?? raw` holds the same
+   * field (ui's own class carries it on `body`, `@w6w/sdk`'s on `raw`).
    */
   invokeAction(
     appId: string,
