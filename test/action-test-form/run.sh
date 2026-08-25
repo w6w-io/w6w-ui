@@ -43,10 +43,11 @@ SRC="${UI_SRC:-$PKG/src}"
 ENGINE="${ENGINE:-chromium}"
 PW_VERSION="${PW_VERSION:-1.60.0}"
 PW_IMAGE="${PW_IMAGE:-mcr.microsoft.com/playwright:v${PW_VERSION}-noble}"
-# Three top-level test()s (M-popout-scroll, T2.1.1's defect-1 gap check, and
-# T1.1.2's delete-confirm gate). A tree that fails to bundle, or a run that
-# dies half-way, reports DID NOT RUN rather than "0 failures".
-EXPECTED_TESTS="${EXPECTED_TESTS:-3}"
+# Four top-level test()s (M-popout-scroll, T2.1.1's defect-1 gap check,
+# T1.1.2's delete-confirm gate, and T1.1.1's duck-typed invoke-error guard). A
+# tree that fails to bundle, or a run that dies half-way, reports DID NOT RUN
+# rather than "0 failures".
+EXPECTED_TESTS="${EXPECTED_TESTS:-4}"
 
 fatal() {
   echo "FATAL: $*"
