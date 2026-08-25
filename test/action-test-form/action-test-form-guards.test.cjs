@@ -287,3 +287,111 @@ test("delete-confirm — Delete is gated behind ConfirmModal, not fired on the r
 
   await page.close();
 });
+
+// ── T1.1.1 — the invoke-error duck-type predicate. `ActionTestForm` used to
+//    classify a failed invoke with `e instanceof ApiError` against ui's OWN
+//    class, which nothing in the running app throws (studio passes
+//    `@w6w/sdk`'s `ApiError` straight through), so the permission headline
+//    never fired and the API-calls panel rendered empty. Three fixtures:
+//    a PLAIN-OBJECT `@w6w/sdk`-shaped rejection (`raw`, no `body`), a real
+//    `Error`-instance ui-shaped rejection (`body`, no `raw`), and the
+//    pre-existing bare `Error` (neither shape) — which must NOT be
+//    misclassified as a permission error. ──────────────────────────────────
+test("T1.1.1 — duck-typed invoke error: headline + apiCalls panel for both error shapes, bare Error unaffected", async () => {
+  // Fixture 1 — `error-raw`: plain object, `raw.apiCalls`, no `body` key.
+  {
+    const page = await open(browser, "error-raw");
+    const runBtn = await page.$(".w6w-tester-actions button");
+    assert.ok(runBtn, "[error-raw] \"Run action\" button not found");
+    await runBtn.click();
+    await page.waitForSelector(".w6w-result.w6w-error", { timeout: 5000 });
+    await page.waitForTimeout(150);
+
+    const info = await page.evaluate(() => {
+      const headline = document.querySelector(".w6w-result.w6w-error strong")?.textContent ?? null;
+      const rows = [...document.querySelectorAll("details.w6w-result")];
+      return {
+        headline,
+        rowCount: rows.length,
+        summary: rows[0]?.querySelector("summary")?.textContent ?? null,
+      };
+    });
+    assert.ok(
+      info.headline?.startsWith("Permission denied by the provider"),
+      `[error-raw] headline "${info.headline}" does not start with "Permission denied by the provider"`,
+    );
+    assert.equal(
+      info.rowCount,
+      1,
+      `[error-raw] expected exactly one details.w6w-result row, got ${info.rowCount}`,
+    );
+    assert.ok(
+      info.summary?.includes("GET") && info.summary?.includes("https://api.sendgrid.com/v3/marketing/lists"),
+      `[error-raw] api-call row summary "${info.summary}" does not contain the fixture's method + URL`,
+    );
+    await page.close();
+  }
+
+  // Fixture 2 — `error-body`: a real Error instance, `body.apiCalls`, no `raw` key.
+  {
+    const page = await open(browser, "error-body");
+    const runBtn = await page.$(".w6w-tester-actions button");
+    assert.ok(runBtn, "[error-body] \"Run action\" button not found");
+    await runBtn.click();
+    await page.waitForSelector(".w6w-result.w6w-error", { timeout: 5000 });
+    await page.waitForTimeout(150);
+
+    const info = await page.evaluate(() => {
+      const headline = document.querySelector(".w6w-result.w6w-error strong")?.textContent ?? null;
+      const rows = [...document.querySelectorAll("details.w6w-result")];
+      return {
+        headline,
+        rowCount: rows.length,
+        summary: rows[0]?.querySelector("summary")?.textContent ?? null,
+      };
+    });
+    assert.ok(
+      info.headline?.startsWith("Permission denied by the provider"),
+      `[error-body] headline "${info.headline}" does not start with "Permission denied by the provider"`,
+    );
+    assert.equal(
+      info.rowCount,
+      1,
+      `[error-body] expected exactly one details.w6w-result row, got ${info.rowCount}`,
+    );
+    assert.ok(
+      info.summary?.includes("POST") && info.summary?.includes("https://api.sendgrid.com/v3/mail/send"),
+      `[error-body] api-call row summary "${info.summary}" does not contain the fixture's method + URL`,
+    );
+    await page.close();
+  }
+
+  // Fixture 3 — the existing `embedded-rail` bare `Error`: neither shape (no
+  // `status`/`code`) must NOT be misclassified as a permission error, and
+  // carries no apiCalls at all.
+  {
+    const page = await open(browser, "embedded-rail");
+    const runBtn = await page.$(".w6w-tester-actions button");
+    assert.ok(runBtn, '[embedded-rail] "Run action" button not found');
+    await runBtn.click();
+    await page.waitForSelector(".w6w-result.w6w-error", { timeout: 5000 });
+    await page.waitForTimeout(150);
+
+    const info = await page.evaluate(() => {
+      const headline = document.querySelector(".w6w-result.w6w-error strong")?.textContent ?? null;
+      const rows = [...document.querySelectorAll("details.w6w-result")];
+      return { headline, rowCount: rows.length };
+    });
+    assert.equal(
+      info.headline,
+      "action-test-form harness: invokeAction rejected",
+      `[embedded-rail] headline "${info.headline}" is not exactly the bare Error's message`,
+    );
+    assert.equal(
+      info.rowCount,
+      0,
+      `[embedded-rail] expected zero details.w6w-result rows, got ${info.rowCount}`,
+    );
+    await page.close();
+  }
+});

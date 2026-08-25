@@ -5,7 +5,6 @@ import { ApiCallsPanel } from "./components/ApiCallsPanel.tsx";
 import { ConfirmModal } from "./components/ConfirmModal.tsx";
 import { ListItem } from "./components/ListItem.tsx";
 import { Modal } from "./components/Modal.tsx";
-import { ApiError } from "./createW6WApi.ts";
 import { useW6WApi } from "./provider.tsx";
 import type { TestRunSummary } from "./provider.tsx";
 import type { ActionDef, ApiCallRecord, SavedTest, ThemeMode } from "./types.ts";
@@ -141,17 +140,37 @@ function extractProviderMessage(msg: string): string {
 }
 
 /**
+ * A failed-invoke error shape, matched by field rather than class identity —
+ * ui's own `ApiError` and `@w6w/sdk`'s are two different classes across the
+ * package boundary, and `status`+`code` is what both actually carry.
+ * Considered mirroring `packages/wrappers/cli/src/exit.ts:60-63`'s `name ===
+ * "ApiError"` fallback; not adopted — that solves module DUPLICATION of one
+ * class, while ui's problem is cross-package IDENTITY, which `status`+`code`
+ * already settles.
+ */
+function isInvokeApiError(
+  e: unknown,
+): e is { status: number; code: string; message?: string; body?: unknown; raw?: unknown } {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    typeof (e as { status: unknown }).status === "number" &&
+    typeof (e as { code: unknown }).code === "string"
+  );
+}
+
+/**
  * Turn a thrown invoke error into a user-facing message. A permission/credential
  * failure at the underlying provider (HTTP 401/403, or the message mentions
  * scopes/forbidden/unauthorized) is stated plainly with what to fix, so the user
  * isn't left staring at a raw upstream JSON blob.
  */
 function describeInvokeError(e: unknown): InvokeError {
-  if (!(e instanceof ApiError)) {
+  if (!isInvokeApiError(e)) {
     return { headline: (e as Error)?.message ?? "The action failed to run." };
   }
-  const detail = extractProviderMessage(e.message);
-  const haystack = `${e.status} ${e.code} ${e.message}`.toLowerCase();
+  const detail = extractProviderMessage(e.message ?? "");
+  const haystack = `${e.status} ${e.code} ${e.message ?? ""}`.toLowerCase();
   const isPermission =
     e.status === 401 ||
     e.status === 403 ||
@@ -172,10 +191,16 @@ function describeInvokeError(e: unknown): InvokeError {
   return { headline: "The action returned an error.", detail };
 }
 
-/** The captured outbound calls the server attached to a failed invoke's body. */
+/**
+ * The captured outbound calls the server attached to a failed invoke — ui's
+ * own `ApiError` carries them on `body`, `@w6w/sdk`'s on `raw`; read `body ??
+ * raw` so either shape's calls surface.
+ */
 function apiCallsOf(e: unknown): ApiCallRecord[] {
-  const body = e instanceof ApiError ? (e.body as { apiCalls?: ApiCallRecord[] } | null) : null;
-  return body?.apiCalls ?? [];
+  const source = isInvokeApiError(e)
+    ? ((e.body ?? e.raw) as { apiCalls?: ApiCallRecord[] } | null)
+    : null;
+  return source?.apiCalls ?? [];
 }
 
 /**

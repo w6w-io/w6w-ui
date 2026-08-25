@@ -30,13 +30,25 @@ import type { ActionDef } from "./types.ts";
 //                     (which never resolves here, same as every other
 //                     stubbed method) → exercises the ConfirmModal gate on
 //                     `deleteCurrentTest`.
+//   error-raw       — default (non-embedded) layout, `invokeAction` rejects
+//                     with a PLAIN OBJECT (not an `Error` instance) shaped
+//                     like `@w6w/sdk`'s `ApiError`: `status`/`code`/`message`/
+//                     `raw.apiCalls`, no `body` key → exercises the duck-type
+//                     predicate's non-`Error`-instance path (T1.1.1).
+//   error-body      — default (non-embedded) layout, `invokeAction` rejects
+//                     with a real `Error` instance carrying extra
+//                     `status`/`code`/`body.apiCalls` fields, no `raw` key —
+//                     mirrors ui's own `ApiError` shape (T1.1.1).
 const variant = new URLSearchParams(location.search).get("variant");
 
 // Fake API: every method returns a promise that never resolves, EXCEPT
-// `invokeAction` on the two `embedded-*` variants, which rejects so the
-// error box has something real to render, and `deleteSavedTest` on the
-// `delete-confirm` variant, which counts real invocations so the test can
-// assert the ConfirmModal — not the raw click — gates the mutation.
+// `invokeAction` on the two `embedded-*` variants (rejects with a bare
+// `Error`, unrelated to any invoke-error shape) and on `error-raw`/
+// `error-body` (rejects with the two invoke-error shapes T1.1.1's duck-type
+// predicate must accept), so the error box has something real to render, and
+// `deleteSavedTest` on the `delete-confirm` variant, which counts real
+// invocations so the test can assert the ConfirmModal — not the raw click —
+// gates the mutation.
 // biome-ignore lint/suspicious/noExplicitAny: harness stub, intentionally untyped against W6WApi.
 const api: any = new Proxy(
   {},
@@ -47,6 +59,51 @@ const api: any = new Proxy(
         prop === "invokeAction"
       ) {
         return () => Promise.reject(new Error("action-test-form harness: invokeAction rejected"));
+      }
+      if (variant === "error-raw" && prop === "invokeAction") {
+        // A PLAIN OBJECT, not an `Error` instance — `@w6w/sdk`'s `ApiError`
+        // shape, carrying `raw` and no `body` key.
+        return () =>
+          Promise.reject({
+            status: 403,
+            code: "provider_denied",
+            message: "SendGrid list index returned 403: request had insufficient authorization",
+            raw: {
+              apiCalls: [
+                {
+                  host: "api.sendgrid.com",
+                  method: "GET",
+                  url: "https://api.sendgrid.com/v3/marketing/lists",
+                  status: 403,
+                },
+              ],
+            },
+          });
+      }
+      if (variant === "error-body" && prop === "invokeAction") {
+        // A real `Error` instance, mirroring ui's own `ApiError` — carries
+        // `body` and no `raw` key.
+        return () => {
+          const err = new Error(
+            "SendGrid mail send returned 403: request had insufficient authorization",
+          );
+          return Promise.reject(
+            Object.assign(err, {
+              status: 403,
+              code: "provider_denied",
+              body: {
+                apiCalls: [
+                  {
+                    host: "api.sendgrid.com",
+                    method: "POST",
+                    url: "https://api.sendgrid.com/v3/mail/send",
+                    status: 403,
+                  },
+                ],
+              },
+            }),
+          );
+        };
       }
       if (variant === "delete-confirm" && prop === "deleteSavedTest") {
         return () => {
