@@ -25,6 +25,27 @@ export interface AppSummary {
   successor?: string;
 }
 
+/** One trigger an app declares, as returned by GET /apps/:id/triggers. */
+export interface TriggerSummary {
+  key: string;
+  /** The trigger's human label. REQUIRED — the wire type calls it `title`, not
+   *  `displayName`; do not rename it. */
+  title: string;
+  description?: string;
+  requiresAuth?: boolean;
+}
+
+/** A Subscription (rfcs/trigger.md) as returned by the console subscription routes. */
+export interface SubscriptionSummary {
+  id: string;
+  appId: string;
+  triggerKey: string;
+  workflowId: string;
+  connectionId: string | null;
+  /** Present only for `appId === "@w6w/webhook"` — the server's own computed receive URL. */
+  webhookUrl?: string;
+}
+
 /** One field on an Auth method's connection form. Drives the input widgets. */
 export interface AuthField {
   key: string;
