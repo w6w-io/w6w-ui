@@ -1951,7 +1951,15 @@ export function AppStepConfig({
         setAuths(au);
         setConns(co);
         setActions(ac);
-        if (co.length > 0) setConnectionId(co[0].id);
+        // P2: in the auto-satisfied state, never auto-select an existing
+        // connection — it would be silently written into every step the user
+        // builds. A connection picked deliberately through the "+ New" escape
+        // hatch still is (that flows through `refetchConns`/`onCreated`, not
+        // here). No availability re-filter needed: `autoSatisfied` is only
+        // ever set on a `tenantAuth`/`jit` entry, and `available` stays
+        // unconditionally `true` for every non-`oauth2` type (T3.1.1 P5).
+        const autoSat = (au ?? []).some((a) => a.autoSatisfied === true);
+        if (!autoSat && co.length > 0) setConnectionId(co[0].id);
       })
       .catch((e) => !canceled && setMetaError((e as Error).message));
     return () => {
@@ -1966,7 +1974,14 @@ export function AppStepConfig({
   };
 
   const availableAuths = (auths ?? []).filter((a) => a.available !== false);
-  const needsConnection = availableAuths.length > 0;
+  // Third connection state: the operator has flagged a `tenantAuth`/`jit`
+  // method as zero-credential for this tenant, so the server resolves a
+  // connection automatically at invoke time — the step is complete with none
+  // picked. `.some(...)` deliberately: an app declaring both an `oauth2`
+  // method and an auto-satisfied `tenantAuth` method is auto-satisfied, and
+  // the oauth2 route stays reachable through the "+ New" escape hatch (P3).
+  const autoSatisfied = availableAuths.some((a) => a.autoSatisfied === true);
+  const needsConnection = availableAuths.length > 0 && !autoSatisfied;
   const hasConnection = (conns ?? []).length > 0;
   const selectedAction = (actions ?? []).find((a) => a.key === actionKey);
   // Alphabetical by display title (falling back to key) so the dropdown is
@@ -2028,7 +2043,12 @@ export function AppStepConfig({
       uses: {
         app: appId,
         action: selectedAction?.key ?? actionKey,
-        ...(needsConnection && connectionId ? { connection: connectionId } : {}),
+        // A connection is emitted only when the user explicitly picked one —
+        // in the auto-satisfied state nothing is picked by default (P2), so
+        // nothing is emitted here, and the server resolves the connection
+        // live on every call. Never synthesise an id: it does not exist
+        // server-side.
+        ...((needsConnection || autoSatisfied) && connectionId ? { connection: connectionId } : {}),
       },
       with: withValues,
       ...draftConfig,
@@ -2140,7 +2160,38 @@ export function AppStepConfig({
               </div>
             </div>
 
-            {/* Connection */}
+            {/* Connection — the third, auto-satisfied state (P3): the section
+                still renders (it never disappears — a user may still want to
+                add their own third-party account), but the picker is replaced
+                by a passive line plus the escape hatch. */}
+            {auths !== null && autoSatisfied && (
+              <div className="w6w-field">
+                <span>Connection</span>
+                <div className="w6w-conn-label">
+                  <span className="w6w-conn-label-name">
+                    Connected automatically — this app needs no connection for your organization.
+                  </span>
+                  <button
+                    type="button"
+                    className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                    onClick={() => setShowConnModal(true)}
+                  >
+                    Create connection
+                  </button>
+                </div>
+                {/* P3a / HITL-8's pinned default: auto-connect is synchronous-only
+                    (HITL-4) — a queued/scheduled Run of this saved workflow drops
+                    `subjectToken` before it reaches the invoke path, so it still
+                    needs a connection configured on the step. Nothing server-side
+                    changes; this is the editor telling the truth about that limit. */}
+                <span className="w6w-hint">
+                  A scheduled or queued run of this workflow still needs a connection configured on
+                  this step — use "Create connection" if this step will run on a schedule.
+                </span>
+              </div>
+            )}
+
+            {/* Connection — the two pre-existing states (needs one / has one). */}
             {auths !== null &&
               needsConnection &&
               (!hasConnection ? (
@@ -2283,7 +2334,9 @@ export function AppStepConfig({
             <StepTestRun
               app={appId}
               action={selectedAction.key}
-              connectionId={needsConnection && connectionId ? connectionId : undefined}
+              connectionId={
+                (needsConnection || autoSatisfied) && connectionId ? connectionId : undefined
+              }
               values={withValues}
               canRun={
                 setupComplete && requiredParamsFilled(selectedAction.params ?? [], withValues)
