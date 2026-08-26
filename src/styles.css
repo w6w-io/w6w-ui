@@ -2096,6 +2096,14 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   background: var(--w6w-accent);
   border-color: var(--w6w-accent);
   color: #fff;
+  /* The count's `.w6w-muted` sets its OWN color, so it doesn't inherit this
+     `color: #fff` — left alone it stays `var(--w6w-muted)`, a gray tuned for
+     the unpressed `--w6w-panel` background, which is nearly invisible against
+     the accent fill. Not full white: the count is still secondary to the
+     label. */
+}
+.w6w-apppicker-chip[aria-pressed=true] .w6w-muted {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 /* AppPicker's own layout owner, nested inside `.w6w-stepbuilder-content` (never
