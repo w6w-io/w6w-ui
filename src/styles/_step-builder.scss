@@ -118,15 +118,29 @@
    `main` (NodeList/CallableRow/ReadyToUseFlow still consume them unmodified)
    — this rule wins the cascade purely by being declared later at equal
    (single-class) specificity. `minmax(190px, 1fr)` is re-derived for this
-   card's much shorter content (icon + name + id, not a full description
-   card) from the scale `packages/frontend`'s generic `.grid` utility uses
-   (`minmax(260px, 1fr)`) — `grid-template-columns` is box geometry, outside
-   `lint:tokens`' scanned property set, so the literal is deliberate, not an
-   oversight. */
+   card's much shorter content (icon + name + id + version, not a full
+   description card) from the scale `packages/frontend`'s generic `.grid`
+   utility uses (`minmax(260px, 1fr)`) — `grid-template-columns` is box
+   geometry, outside `lint:tokens`' scanned property set, so the literal is
+   deliberate, not an oversight.
+
+   `auto-fill`, NOT `auto-fit`: the two differ in exactly one case, and it is
+   the case a search box guarantees will happen. `auto-fit` COLLAPSES the
+   tracks no card landed in, and the `1fr` then hands their width to the
+   survivors — so typing a query that matches one app blew that single card up
+   to the full width of the panel, a tile that changes size as you type. With
+   `auto-fill` the empty tracks are kept at their `minmax()` width, so a card
+   is the same size whether the grid holds 60 of them or 1.
+
+   `align-content: start` is the vertical half of the same invariant: an auto
+   row track under the default `stretch` absorbs the free space of a grid with
+   a definite height (this one's, from `.w6w-stepbuilder-scroll`'s `flex: 1`),
+   so a single result would also have grown DOWN to fill the panel. */
 .w6w-apppicker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: var(--w6w-sp-2);
+  align-content: start;
 }
 /* The quieter resting card (D-3): `--w6w-panel` at rest instead of
    `--w6w-panel-2`, shifting TO `--w6w-panel-2` on hover/focus — the inverse
@@ -134,14 +148,58 @@
    `.w6w-stepbuilder-item:hover`'s `border-color: var(--w6w-accent)` above
    still applies unchanged, so hover keeps both effects together. Slightly
    tighter padding than the shared item, sized for a narrower multi-column
-   card rather than a single full-width row. */
+   card rather than a single full-width row.
+
+   `min-height` pins every tile to one height regardless of what it holds:
+   `version` is optional on `AppSummary`, so a catalog that mixes versioned and
+   unversioned apps would otherwise render two card heights down the same grid
+   (grid items stretch to their ROW, not to the whole grid). The floor is the
+   three-line card's own content height rounded up, so it never clips.
+
+   `align-items: flex-start` overrides the shared item's `center`: against a
+   three-line block a centred 24px icon floats beside the id rather than
+   reading as the name's own mark. */
 .w6w-apppicker-card {
   background: var(--w6w-panel);
   padding: var(--w6w-sp-2) var(--w6w-sp-2-5);
+  align-items: flex-start;
+  min-height: 84px;
 }
 .w6w-apppicker-card:hover,
 .w6w-apppicker-card:focus-visible {
   background: var(--w6w-panel-2);
+}
+/* The card's two metadata lines. One `font-size` declaration for both, because
+   there is only one deliberate literal here to justify: the type ramp's
+   smallest role is `--w6w-fs-xs` (0.75rem), the id and version want to sit a
+   step UNDER it, and the ramp has no `2xs` — its 30-name key set is pinned
+   name-for-name by `scale-tokens.test.ts` and mirrored by `packages/frontend`'s
+   `check:scale-parity`, so adding one is a cross-repo contract change, not a
+   card tweak. `code`'s own UA `font-size` also has to be overridden here
+   whatever value is chosen. */
+.w6w-apppicker-card-id,
+.w6w-apppicker-card-version {
+  /* lint-tokens-allow: one step under --w6w-fs-xs; the ramp has no 2xs role and its keys are pinned */
+  font-size: 0.6875rem;
+  color: var(--w6w-muted);
+  font-family: var(--w6w-font-mono);
+}
+/* Truncation, not wrapping: `min-width: 0` on the parent
+   `.w6w-stepbuilder-item-main` is what lets this shrink below its own
+   min-content width in the first place — without it the ellipsis never
+   engages and a long id widens the flex line instead. */
+.w6w-apppicker-card-id {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.6;
+}
+/* Quieter than the name, but a step louder than the id it sits under — it is
+   the shorter, more scannable of the two. */
+.w6w-apppicker-card-version {
+  opacity: 0.75;
 }
 
 /* The opt-in category-filter chip row (D-1a; AddConnectionModal only —

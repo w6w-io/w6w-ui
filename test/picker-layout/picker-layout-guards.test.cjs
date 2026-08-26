@@ -931,6 +931,113 @@ test("I13 — bounded chip collapse + combined category+search empty state, add 
   await page.close();
 });
 
+// ── I14 — a tile is the same tile whatever the grid holds. Two ways the card
+//    could have resized itself out from under the user, both of which the
+//    original `auto-fit` grid did:
+//
+//      · WIDTH — `auto-fit` COLLAPSES the tracks no card landed in, and the
+//        `1fr` then hands their width to the survivors, so narrowing the
+//        catalog to one match blew that card up to the panel's full width.
+//        `auto-fill` keeps the empty tracks, so the track COUNT is the
+//        measurement: unchanged under `auto-fill`, 1 under `auto-fit`.
+//      · HEIGHT — an auto row track under the default `align-content: stretch`
+//        absorbs the free space of a definite-height grid, so the same one
+//        match also grew DOWN to fill the panel. With 60 cards the grid
+//        overflows and there IS no free space, which is exactly why this only
+//        ever showed up once a search narrowed the list — and why the height
+//        has to be compared against the many-card height, not to a literal.
+//
+//    Track count rather than card width for the horizontal half because the
+//    two states differ by a scrollbar: 60 cards overflow `.w6w-stepbuilder-
+//    scroll` (I10 asserts it), one card does not, so the grid's own content
+//    box is genuinely ~15px wider in the second measurement and an equality on
+//    card width would be asserting the scrollbar, not the layout. The width
+//    relation kept below is therefore a CEILING with that slack in it.
+//
+//    Also folded in: the card's third line (`version`), and that a long id
+//    truncates rather than resizing its tile — probed by writing a 176-char id
+//    into the real element, which no fixture app carries and React will not
+//    revert (nothing about it is state).
+test("I14 — one search result keeps the card's geometry; version line present; a long id truncates", async () => {
+  const page = await open(browser, { v: "add", q: "n=60", vp: VP.wide });
+
+  // Every card carries the version the fixture stamps on every app.
+  const versions = await page.evaluate(() =>
+    [...document.querySelectorAll(".w6w-apppicker-card")].map(
+      (c) => c.querySelector(".w6w-apppicker-card-version")?.textContent ?? null,
+    ),
+  );
+  assert.equal(versions.length, 60, `expected 60 cards, got ${versions.length}`);
+  assert.deepEqual(
+    [...new Set(versions)],
+    ["v1.0.0"],
+    `every card must render its version line: ${JSON.stringify([...new Set(versions)])}`,
+  );
+
+  const trackCount = () =>
+    page.evaluate(() => {
+      const grid = document.querySelector(".w6w-apppicker-grid");
+      return getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length;
+    });
+
+  const manyTracks = await trackCount();
+  const manyCard = await rect(page, ".w6w-apppicker-card");
+  assert.ok(manyTracks >= 3, `VP.wide must lay out >= 3 column tracks to begin with, got ${manyTracks}`);
+
+  // Exactly one match: the fixture names apps "App 0".."App 59", so no other
+  // display name and no id (`vendor-app-17`, no space) contains "App 17".
+  await page.fill(".w6w-stepbuilder-search", "App 17");
+  await page.waitForTimeout(150);
+
+  const names = await cardIndices(page);
+  assert.deepEqual(names, [17], `search "App 17" must match exactly one app, got ${JSON.stringify(names)}`);
+
+  const oneTracks = await trackCount();
+  const oneCard = await rect(page, ".w6w-apppicker-card");
+  await page.screenshot({ path: "/w/apppicker-single-result.png" });
+
+  assert.equal(
+    oneTracks,
+    manyTracks,
+    `the grid collapsed from ${manyTracks} column tracks to ${oneTracks} on a single result — the card is no longer a card`,
+  );
+  assert.ok(
+    oneCard.width <= manyCard.width + 20,
+    `single-result card width ${oneCard.width} exceeds the ${manyCard.width} it had in the full grid (+20 scrollbar slack)`,
+  );
+  assert.equal(
+    oneCard.height,
+    manyCard.height,
+    `single-result card height ${oneCard.height} != the ${manyCard.height} it had in the full grid`,
+  );
+
+  // A long id must be clipped by the tile, never the other way round.
+  const probe = await page.evaluate(() => {
+    const card = document.querySelector(".w6w-apppicker-card");
+    const id = card.querySelector(".w6w-apppicker-card-id");
+    const before = card.getBoundingClientRect();
+    id.textContent = "vendor-app-with-a-deliberately-unreasonable-identifier-".repeat(4);
+    const after = card.getBoundingClientRect();
+    const cs = getComputedStyle(id);
+    return {
+      w0: Math.round(before.width),
+      h0: Math.round(before.height),
+      w1: Math.round(after.width),
+      h1: Math.round(after.height),
+      clipped: id.scrollWidth > id.clientWidth,
+      textOverflow: cs.textOverflow,
+      whiteSpace: cs.whiteSpace,
+    };
+  });
+  await page.close();
+
+  assert.ok(probe.clipped, "a 220-char id did not overflow its own box — nothing is clipping it");
+  assert.equal(probe.textOverflow, "ellipsis", `id text-overflow is "${probe.textOverflow}"`);
+  assert.equal(probe.whiteSpace, "nowrap", `id white-space is "${probe.whiteSpace}"`);
+  assert.equal(probe.w1, probe.w0, `a long id widened the tile: ${probe.w0} -> ${probe.w1}`);
+  assert.equal(probe.h1, probe.h0, `a long id grew the tile taller: ${probe.h0} -> ${probe.h1}`);
+});
+
 // ── M-xl — the -xl size modifier actually applies. `dialog.w6w-modal`
 //    (0,1,1) previously out-specified `.w6w-modal-xl` (0,1,0), so the
 //    authored `max-width: 1040px` never won against the base rule's 800px —
