@@ -1980,7 +1980,9 @@ export function AppStepConfig({
   // picked. `.some(...)` deliberately: an app declaring both an `oauth2`
   // method and an auto-satisfied `tenantAuth` method is auto-satisfied, and
   // the oauth2 route stays reachable through the "+ New" escape hatch (P3).
-  const autoSatisfied = availableAuths.some((a) => a.autoSatisfied === true);
+  const autoSatisfied = availableAuths.some(
+    (a) => a.autoSatisfied === true && (a.type === "tenantAuth" || a.type === "jit"),
+  );
   const needsConnection = availableAuths.length > 0 && !autoSatisfied;
   const hasConnection = (conns ?? []).length > 0;
   const selectedAction = (actions ?? []).find((a) => a.key === actionKey);
