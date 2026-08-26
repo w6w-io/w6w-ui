@@ -3,6 +3,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--w6w-sp-1-5);
+  /* lint-tokens-allow: relative em, not absolute rem like the scale's --w6w-fs- type tokens — mirrors the accepted _modal.scss:88 .w6w-modal-subtitle precedent; .w6w-step-meta currently has zero .tsx call sites (possible dead CSS, not this task's to delete) */
   font-size: 0.8em;
   color: var(--w6w-muted);
 }
@@ -13,7 +14,7 @@
 /* Step builder (sidebar + content) */
 .w6w-stepbuilder {
   display: flex;
-  gap: 14px;
+  gap: var(--w6w-sp-4);
   min-height: 340px;
 }
 .w6w-stepbuilder-sidebar {
@@ -263,7 +264,7 @@
 .w6w-readytouse-heading {
   margin: 0;
   font-size: var(--w6w-fs-sm);
-  font-weight: 600;
+  font-weight: var(--w6w-fw-semibold);
   color: var(--w6w-muted-text, var(--w6w-text));
 }
 
@@ -302,6 +303,7 @@
   border-radius: 6px;
   padding: var(--w6w-sp-0-5) var(--w6w-sp-1-5);
   color: var(--w6w-text);
+  /* lint-tokens-allow: relative em, not absolute rem like the scale's --w6w-fs- type tokens — mirrors the accepted _modal.scss:88 .w6w-modal-subtitle precedent */
   font-size: 0.9em;
   font-family: inherit;
 }
