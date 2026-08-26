@@ -54,10 +54,14 @@ PW_IMAGE="${PW_IMAGE:-mcr.microsoft.com/playwright:v${PW_VERSION}-noble}"
 # Plus (T1.1.1) I10-I13 — the multi-column card grid's geometry, its
 # narrow-viewport collapse, and the opt-in category-filter chip row's
 # interaction and bounded collapse, on the real components' real DOM.
+# Plus I14 — the tile keeps its width AND height when a search narrows the
+# grid to one result (the `auto-fit`/`align-content: stretch` pair that let a
+# single match expand to the whole panel), the card's version line, and a
+# long id truncating instead of resizing its tile.
 # The verdict below is REFUSED unless exactly this many ran: a tree that
 # fails to bundle, or a run that dies half-way, reports DID NOT RUN rather
 # than "0 failures".
-EXPECTED_TESTS="${EXPECTED_TESTS:-21}"
+EXPECTED_TESTS="${EXPECTED_TESTS:-22}"
 
 fatal() {
   echo "FATAL: $*"

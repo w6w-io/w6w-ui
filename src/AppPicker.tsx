@@ -48,7 +48,7 @@ export interface AppPickerProps {
 }
 
 /**
- * Searchable grid of app cards (icon + name + id) — the shared app picker used
+ * Searchable grid of app cards (icon + name + id + version) — the shared app picker used
  * by both the step builder and the add-connection modal. Fetches the app list
  * from `useW6WApi()` unless the caller passes `apps`; filters alphabetically by
  * name/id as the user types.
@@ -244,7 +244,13 @@ export function AppPicker({
               />
               <span className="w6w-stepbuilder-item-main">
                 <strong>{a.displayName}</strong>
-                <code className="w6w-muted w6w-small">{a.id}</code>
+                {/* The id is secondary metadata under the NAME, and it is the one
+                    field on this card with no length bound (`vendor-app-…`, a
+                    `@`-scoped id, a long slug), so it truncates rather than
+                    widening the card or wrapping to a second line — the tile's
+                    geometry is fixed by the grid, not by its longest id. */}
+                <code className="w6w-apppicker-card-id">{a.id}</code>
+                {a.version && <span className="w6w-apppicker-card-version">v{a.version}</span>}
               </span>
             </button>
           ))}
