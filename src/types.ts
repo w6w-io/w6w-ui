@@ -259,7 +259,7 @@ export interface WorkflowDetail {
 /** Auth method declaration as exposed by an app's manifest. */
 export interface AuthDef {
   key: string;
-  type: "oauth2" | "apiKey" | "basic" | "bearer" | "custom" | string;
+  type: "oauth2" | "apiKey" | "basic" | "bearer" | "custom" | "tenantAuth" | "jit" | string;
   displayName?: string;
   description?: string;
   connectionLabel?: string;
@@ -274,6 +274,14 @@ export interface AuthDef {
   available?: boolean;
   /** Names of host-side config keys this method needs, when applicable. */
   requiresHostConfig?: string[];
+  /**
+   * Present only on a `tenantAuth`/`jit` entry: `true` when the operator has
+   * flagged this method as zero-credential for the calling scope's tenant, so
+   * the server resolves a connection automatically at invoke time. This is
+   * NOT `available` — `available` means "this method can be picked at all";
+   * `autoSatisfied` means "the user does not have to pick anything for it".
+   */
+  autoSatisfied?: boolean;
 }
 
 /** Public summary of a stored connection — never carries the credential. */
