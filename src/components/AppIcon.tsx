@@ -48,13 +48,20 @@ export function AppIcon({ src, srcDark, brandColor, name, size = 32, theme }: Pr
           height: size,
           borderRadius: 6,
           flexShrink: 0,
-          // `contain` (not `cover`) keeps the whole glyph visible; the padding +
-          // border-box give it a consistent inset so square/edge-to-edge icons
-          // stop clipping the rounded frame.
+          // `contain` (not `cover`) keeps the whole glyph visible; the small
+          // inset + border-box keep square/edge-to-edge icons from clipping
+          // the rounded frame, without eating so much of the box that the
+          // glyph reads as a stamp inside a swatch.
           objectFit: "contain",
-          padding: Math.max(2, Math.round(size * 0.12)),
+          padding: Math.max(1, Math.round(size * 0.06)),
           boxSizing: "border-box",
-          background: brandColor ?? "var(--w6w-icon-swatch, var(--w6w-panel-2))",
+          // A real icon SVG carries its own colors — painting `brandColor`
+          // behind it double-tints the glyph and, for icons with built-in
+          // transparent margin, reads as a thick brand-colored border rather
+          // than an icon. Always the neutral swatch here; `brandColor` stays
+          // reserved for the initials-tile fallback below, where it IS the
+          // glyph's only color.
+          background: "var(--w6w-icon-swatch, var(--w6w-panel-2))",
         }}
       />
     );
