@@ -50,6 +50,7 @@ import {
 import { TriggerFillForm } from "./TriggerFillForm.tsx";
 import { AppIcon } from "./components/AppIcon.tsx";
 import { ConfirmModal } from "./components/ConfirmModal.tsx";
+import { Copyable } from "./components/Copyable.tsx";
 import {
   type ExpressionOptions,
   ExpressionOptionsProvider,
@@ -73,6 +74,7 @@ import {
 import {
   type FlowStep,
   type FlowWorkflow,
+  WEBHOOK_APP,
   internalNodeIcon,
   internalNodeLabel,
   internalNodeParams,
@@ -111,7 +113,13 @@ import {
 } from "./step-preview-state.ts";
 import { useEffectiveTheme } from "./theme.ts";
 import { asFieldDefs, fieldsToParams, seedValues } from "./trigger-fields.ts";
-import type { ActionDef, ActionParam, AppSummary, ConnectionSummary } from "./types.ts";
+import type {
+  ActionDef,
+  ActionParam,
+  AppSummary,
+  ConnectionSummary,
+  SubscriptionSummary,
+} from "./types.ts";
 import { useSeedSources } from "./use-seed-sources.ts";
 
 /**
@@ -2095,52 +2103,60 @@ export function StepEditModal({
             />
           )}
 
-          {tab === "configure" &&
-            (params === null ? (
-              <p className="w6w-muted w6w-small">Loading parameters…</p>
-            ) : configView === "props" ? (
-              <ParamsForm
-                params={params}
-                values={step.with ?? {}}
-                readOnly={readOnly}
-                onChange={(w) => commit({ ...step, with: w })}
-              />
-            ) : configView === "code" ? (
-              // Full step, read-only (D-3) — `stepToJson` is the ONE serializer,
-              // shared with the two other code-view hosts.
-              <JsonEditor
-                value={codeText}
-                onChange={() => {}}
-                readOnly
-                minHeight="260px"
-                height="100%"
-                aria-label={`Step ${step.id} JSON`}
-              />
-            ) : configView === "params-code" ? (
-              <JsonEditor
-                value={paramsCodeText}
-                onChange={setParamsCodeText}
-                readOnly={readOnly}
-                minHeight="260px"
-                height="100%"
-                aria-label={`Step ${step.id} params JSON`}
-                onValidChange={(p) =>
-                  p &&
-                  typeof p === "object" &&
-                  !Array.isArray(p) &&
-                  commit({ ...step, with: p as Record<string, unknown> })
-                }
-              />
-            ) : (
-              <div className="w6w-stack">
-                <NodeConfigForm
-                  config={{ retry: step.retry, onError: step.onError, notes: step.notes }}
-                  onChange={(c) => commit({ ...step, ...c })}
+          {tab === "configure" && (
+            <>
+              {step.uses.app === WEBHOOK_APP &&
+                api.listSubscriptionsForWorkflow &&
+                api.createSubscription && (
+                  <WebhookUrlPanel workflowId={workflowId} step={step} readOnly={readOnly} />
+                )}
+              {params === null ? (
+                <p className="w6w-muted w6w-small">Loading parameters…</p>
+              ) : configView === "props" ? (
+                <ParamsForm
+                  params={params}
+                  values={step.with ?? {}}
                   readOnly={readOnly}
+                  onChange={(w) => commit({ ...step, with: w })}
                 />
-                <StepPortsControl step={step} readOnly={readOnly} onChange={commit} />
-              </div>
-            ))}
+              ) : configView === "code" ? (
+                // Full step, read-only (D-3) — `stepToJson` is the ONE serializer,
+                // shared with the two other code-view hosts.
+                <JsonEditor
+                  value={codeText}
+                  onChange={() => {}}
+                  readOnly
+                  minHeight="260px"
+                  height="100%"
+                  aria-label={`Step ${step.id} JSON`}
+                />
+              ) : configView === "params-code" ? (
+                <JsonEditor
+                  value={paramsCodeText}
+                  onChange={setParamsCodeText}
+                  readOnly={readOnly}
+                  minHeight="260px"
+                  height="100%"
+                  aria-label={`Step ${step.id} params JSON`}
+                  onValidChange={(p) =>
+                    p &&
+                    typeof p === "object" &&
+                    !Array.isArray(p) &&
+                    commit({ ...step, with: p as Record<string, unknown> })
+                  }
+                />
+              ) : (
+                <div className="w6w-stack">
+                  <NodeConfigForm
+                    config={{ retry: step.retry, onError: step.onError, notes: step.notes }}
+                    onChange={(c) => commit({ ...step, ...c })}
+                    readOnly={readOnly}
+                  />
+                  <StepPortsControl step={step} readOnly={readOnly} onChange={commit} />
+                </div>
+              )}
+            </>
+          )}
 
           {tab === "test" && (
             <div className="w6w-stack">
@@ -2278,6 +2294,101 @@ function StepPortsControl({
       />
       <span>Accept multiple incoming connections</span>
     </label>
+  );
+}
+
+/**
+ * "Webhook URL" panel (I-2) — rendered only for a `WEBHOOK_APP` step, above
+ * the ParamsForm/JsonEditor arms. Get-or-create against the Subscription
+ * mechanism (rfcs/trigger.md), per DECISIONS.md HITL-1 + plan.md D-5:
+ * - on open, lists this workflow's Subscriptions ONCE and takes the first
+ *   `appId === WEBHOOK_APP` entry — never re-derived client-side
+ *   (gap-analysis-I2 §1's `SubscriptionsPage.tsx:24-28` correctness bug is
+ *   deliberately not reproduced here; the server's own `webhookUrl` is the
+ *   only source).
+ * - if one exists, its URL renders through `Copyable` exactly as
+ *   `TenantSettingsPage.tsx:219-227` (full URL, readOnly, aria-label) — no
+ *   create call.
+ * - if none exists, a labelled button creates one with the step's own
+ *   current `with` as the Subscription's `params`, then renders the result.
+ *   `sub_…` ids are server-minted, so this never re-fires on its own — only
+ *   an explicit click creates, and only once a subscription is confirmed
+ *   absent.
+ */
+function WebhookUrlPanel({
+  workflowId,
+  step,
+  readOnly,
+}: {
+  workflowId: string;
+  step: FlowStep;
+  readOnly?: boolean;
+}) {
+  const api = useW6WApi();
+  // `undefined` while the initial list is in flight; `null` once resolved
+  // with no existing webhook subscription for this workflow.
+  const [sub, setSub] = useState<SubscriptionSummary | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  // Deliberately keyed on [api, workflowId] only — NOT on `step` (its `with`
+  // changes on every keystroke in the panel below). Re-running this on a
+  // `with` edit would defeat the "never re-creates" guarantee this panel
+  // exists to provide; the list is a one-shot get, not a live subscription.
+  useEffect(() => {
+    const list = api.listSubscriptionsForWorkflow;
+    if (!list) return;
+    let canceled = false;
+    list(workflowId)
+      .then((subs) => {
+        if (!canceled) setSub(subs.find((s) => s.appId === WEBHOOK_APP) ?? null);
+      })
+      .catch((e) => !canceled && setError((e as Error).message));
+    return () => {
+      canceled = true;
+    };
+  }, [api, workflowId]);
+
+  const create = () => {
+    const createSubscription = api.createSubscription;
+    if (!createSubscription) return;
+    setError(null);
+    setCreating(true);
+    createSubscription(WEBHOOK_APP, step.uses.action, {
+      workflowId,
+      connectionId: null,
+      params: step.with ?? {},
+    })
+      .then((created) => {
+        setCreating(false);
+        setSub(created);
+      })
+      .catch((e) => {
+        setCreating(false);
+        setError(e instanceof Error ? e.message : String(e));
+      });
+  };
+
+  return (
+    <div className="w6w-stack">
+      <p className="w6w-muted w6w-small">
+        <strong>Webhook URL</strong> — the address a third party posts to.
+      </p>
+      {error && <div className="w6w-result w6w-error">{error}</div>}
+      {sub?.webhookUrl ? (
+        <Copyable value={sub.webhookUrl} readOnly>
+          <input type="text" readOnly value={sub.webhookUrl} aria-label="Webhook URL" />
+        </Copyable>
+      ) : sub === undefined ? (
+        <p className="w6w-muted w6w-small">Loading…</p>
+      ) : (
+        !readOnly && (
+          <button type="button" className="w6w-btn" disabled={creating} onClick={create}>
+            {creating ? "Creating…" : "Create webhook URL"}
+          </button>
+        )
+      )}
+    </div>
   );
 }
 

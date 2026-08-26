@@ -125,3 +125,23 @@
   border: 0;
   padding: 0;
 }
+
+/* ── Bare modifier: CopyableText (D-7) ───────────────────────────────────
+   A self-contained modifier, NOT a widening of the shared `> input, >
+   textarea, > pre` selector above (`:28-33`) — that list stays untouched.
+   Strips the box chrome the base `.w6w-copyable` rule sets (`:5-17`: border,
+   background, padding, min-height), and separately gives its own `> span`
+   child the SAME flex-and-shrink pair the shared selector gives an
+   `<input>`/`<textarea>`/`<pre>` (`:28-33` below) — a bare `<span>` is not in
+   that list, and without this it silently reproduces the overflow bug
+   `studio/src/pages/VarsPage.tsx:62-79` had to hand-patch. */
+.w6w-copyable--bare {
+  border: none;
+  background: transparent;
+  padding: 0;
+  min-height: 0;
+}
+.w6w-copyable--bare > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}

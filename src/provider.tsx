@@ -21,7 +21,9 @@ import type {
   FunctionDetail,
   FunctionSummary,
   SavedTest,
+  SubscriptionSummary,
   ThemeMode,
+  TriggerSummary,
   WorkflowDetail,
   WorkflowSummary,
 } from "./types.ts";
@@ -291,6 +293,40 @@ export interface W6WApi {
     error?: unknown;
     terminal: boolean;
   }>;
+
+  /**
+   * List apps that declare at least one trigger — the Triggers tab's
+   * "App triggers" section (T-0). GETs whatever the host resolves to (e.g.
+   * apps filtered by `triggerCount > 0`).
+   *
+   * OPTIONAL, like `listTestRuns?` above: a host that hasn't wired this member
+   * still typechecks and simply doesn't render the App-triggers section.
+   */
+  listTriggerApps?(): Promise<AppSummary[]>;
+
+  /**
+   * List one app's declared triggers. GETs `/apps/:id/triggers`.
+   */
+  getAppTriggers?(appId: string): Promise<TriggerSummary[]>;
+
+  /**
+   * List the Subscriptions bound to one workflow (rfcs/trigger.md). Powers
+   * the webhook-URL panel's get-or-create check (I-2) — GETs
+   * `/workflows/:id/subscriptions`.
+   */
+  listSubscriptionsForWorkflow?(workflowId: string): Promise<SubscriptionSummary[]>;
+
+  /**
+   * Create a Subscription binding an app trigger to a workflow — the one
+   * explicit user action both the Triggers-tab app section (T-0) and the
+   * webhook-URL panel (I-2) call, per DECISIONS.md HITL-1. POSTs
+   * `/apps/:id/triggers/:key/subscriptions`.
+   */
+  createSubscription?(
+    appId: string,
+    triggerKey: string,
+    input: { workflowId: string; connectionId?: string | null; params?: Record<string, unknown> },
+  ): Promise<SubscriptionSummary>;
 }
 
 const Ctx = createContext<W6WApi | null>(null);

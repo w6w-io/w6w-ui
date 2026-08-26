@@ -30,6 +30,7 @@ import type {
   ConnectionSummary,
   FunctionSummary,
   ThemeMode,
+  TriggerSummary,
   WorkflowDetail,
   WorkflowSummary,
 } from "./types.ts";
@@ -557,7 +558,7 @@ export function StepBuilderModal({
               emptyMessage="No AI apps registered yet."
             />
           ) : tab === "triggers" ? (
-            <TriggersFlow onSelect={setSelectedNode} />
+            <TriggersFlow onSelect={setSelectedNode} workflowId={workflowId} onClose={onClose} />
           ) : tab === "controls" ? (
             <ControlsFlow onSelect={setSelectedNode} />
           ) : tab === "data" ? (
@@ -603,15 +604,175 @@ function NodeList({
   );
 }
 
-/** Triggers tab — entry nodes that start a workflow (manual, webhook, …). */
-function TriggersFlow({ onSelect }: { onSelect: (node: InternalNodeDef) => void }) {
+/**
+ * Triggers tab — entry nodes that start a workflow (manual, webhook, …), plus
+ * (T-0) an "App triggers" section listing apps that declare their own
+ * triggers (RFC `trigger.md`). The internal 3 keep their existing `onSelect`
+ * → `onAdd` graph-node behaviour, untouched; the app section is a SEPARATE,
+ * non-graph mechanism (DECISIONS.md HITL-1, plan.md D-3) — selecting an app
+ * trigger never calls `onAdd`.
+ */
+function TriggersFlow({
+  onSelect,
+  workflowId,
+  onClose,
+}: {
+  onSelect: (node: InternalNodeDef) => void;
+  workflowId?: string;
+  onClose: () => void;
+}) {
   const nodes = INTERNAL_NODES.filter((n) => n.group === "trigger");
+  const api = useW6WApi();
   return (
     <div className="w6w-stack">
       <p className="w6w-muted w6w-small">
         Triggers start a workflow — run it manually or on an inbound webhook.
       </p>
       <NodeList nodes={nodes} onSelect={onSelect} />
+      {/* Gated on BOTH workflowId (this builder is opened for a real workflow —
+       *  a Subscription needs a workflow to bind to) and the optional member
+       *  itself. `test/picker-layout`'s I5/I6 mount with no `workflowId` even
+       *  though its stub `api` answers every key truthy — this second gate is
+       *  exactly why that suite stays unaffected (see the contract's test plan). */}
+      {workflowId && api.listTriggerApps && (
+        <AppTriggersSection workflowId={workflowId} onClose={onClose} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * "App triggers" section (T-0): lists apps that declare triggers
+ * (`api.listTriggerApps`), then — once one is picked — that app's declared
+ * triggers (`api.getAppTriggers`). Choosing a trigger calls
+ * `api.createSubscription` on an explicit click only; no graph step is added
+ * (plan.md D-3 — `onAdd` is never reached from this section).
+ */
+function AppTriggersSection({ workflowId, onClose }: { workflowId: string; onClose: () => void }) {
+  const api = useW6WApi();
+  const [apps, setApps] = useState<AppSummary[] | null>(null);
+  const [appsError, setAppsError] = useState<string | null>(null);
+  const [selectedApp, setSelectedApp] = useState<AppSummary | null>(null);
+
+  useEffect(() => {
+    const load = api.listTriggerApps;
+    if (!load) return;
+    let canceled = false;
+    load()
+      .then((r) => !canceled && setApps(r))
+      .catch((e) => !canceled && setAppsError((e as Error).message));
+    return () => {
+      canceled = true;
+    };
+  }, [api]);
+
+  if (!api.listTriggerApps) return null;
+
+  return (
+    <div className="w6w-stack">
+      <p className="w6w-muted w6w-small">
+        <strong>App triggers</strong> — bind one of these apps' declared triggers to this workflow.
+      </p>
+      {appsError ? (
+        <div className="w6w-result w6w-error">{appsError}</div>
+      ) : selectedApp ? (
+        <AppTriggerPicker
+          app={selectedApp}
+          workflowId={workflowId}
+          onBack={() => setSelectedApp(null)}
+          onClose={onClose}
+        />
+      ) : (
+        <AppPicker
+          apps={apps}
+          onSelectApp={setSelectedApp}
+          search={false}
+          emptyMessage="No apps declare triggers yet."
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * One app's declared triggers, once picked in {@link AppTriggersSection} — a
+ * chooser when the app declares triggers, an explicit "declares no triggers"
+ * message when it doesn't (mirrors `SubscriptionsPage.tsx`'s
+ * `TriggerKeyField`, minus its free-text fallback: a trigger key the app
+ * doesn't declare is a `404 unknown_trigger` here, so there is nothing useful
+ * a free-text arm could submit).
+ */
+function AppTriggerPicker({
+  app,
+  workflowId,
+  onBack,
+  onClose,
+}: {
+  app: AppSummary;
+  workflowId: string;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const api = useW6WApi();
+  const [triggers, setTriggers] = useState<TriggerSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    const load = api.getAppTriggers;
+    if (!load) return;
+    let canceled = false;
+    load(app.id)
+      .then((r) => !canceled && setTriggers(r))
+      .catch((e) => !canceled && setError((e as Error).message));
+    return () => {
+      canceled = true;
+    };
+  }, [api, app.id]);
+
+  const create = (triggerKey: string) => {
+    const createSubscription = api.createSubscription;
+    if (!createSubscription) return;
+    setError(null);
+    setCreating(true);
+    createSubscription(app.id, triggerKey, { workflowId, connectionId: null, params: {} })
+      .then(() => onClose())
+      .catch((e) => {
+        setCreating(false);
+        setError(e instanceof Error ? e.message : String(e));
+      });
+  };
+
+  return (
+    <div className="w6w-stack">
+      <button type="button" className="w6w-btn w6w-btn-ghost w6w-btn-sm" onClick={onBack}>
+        ← Back
+      </button>
+      <strong>{app.displayName}</strong>
+      {error && <div className="w6w-result w6w-error">{error}</div>}
+      {triggers === null ? (
+        <p className="w6w-muted w6w-small">Loading triggers…</p>
+      ) : triggers.length === 0 ? (
+        <p className="w6w-muted w6w-small">This app declares no triggers.</p>
+      ) : (
+        <div className="w6w-stepbuilder-list">
+          {triggers.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className="w6w-stepbuilder-item"
+              disabled={creating}
+              onClick={() => create(t.key)}
+            >
+              <span className="w6w-stepbuilder-item-main">
+                <strong>{t.title}</strong>
+                <code className="w6w-muted w6w-small">{t.key}</code>
+                {t.description && <span className="w6w-muted w6w-small">{t.description}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
