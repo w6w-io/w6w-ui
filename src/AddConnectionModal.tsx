@@ -228,6 +228,7 @@ function ConnectionConfig({
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="e.g. Production API key"
+              maxLength={80}
               // A plain text field above a credential field gets treated as the
               // "username" of a login form and prefilled — opt it out.
               name="w6w-connection-label"

@@ -71,11 +71,11 @@ small and authoritative for two specific surfaces — see the routing table belo
    are `.test.ts` globs only, so a `.tsx`-named test file is never even discovered.
 
 4. **`test/picker-layout/` is a real-Chromium gate with a pinned test count.**
-   `test/picker-layout/run.sh:60`: `EXPECTED_TESTS="${EXPECTED_TESTS:-21}"`; `:157-158` is the
+   `test/picker-layout/run.sh:64`: `EXPECTED_TESTS="${EXPECTED_TESTS:-22}"`; `:161-163` is the
    `DID NOT RUN` (exit 3) branch on a mismatch between that constant and the TAP-reported test
    total — so adding a `test()` to `picker-layout-guards.test.cjs` without bumping the constant
    silently voids the gate rather than reporting a false pass. Recounted at this file's pickup
-   commit: `grep -cE '^\s*test\(' test/picker-layout/picker-layout-guards.test.cjs` → exactly **21**,
+   commit: `grep -cE '^\s*test\(' test/picker-layout/picker-layout-guards.test.cjs` → exactly **22**,
    still matching the default.
 
 5. **Gate commands that work here, and a caveat that is conditional, not absolute.**
@@ -107,9 +107,9 @@ framing (its TRAP 2 section).
 | token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** |
 | lint | `./node_modules/.bin/biome check .` | `Checked 88 files in 32ms. No fixes applied.` — 0 errors |
 | typecheck | `./node_modules/.bin/tsc -b --noEmit` | exit 0, no output |
-| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **313 pass, 0 fail** (TAP: `tests 313 · pass 313 · fail 0`) |
+| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **313 pass, 0 fail** (TAP: `tests 313 · pass 313 · fail 0`) — re-verified by T1.1.3 against a clean `git archive` of this file's own pickup commit (`8c46f9a`): both the runtime TAP total and a static `grep -c '^\s*test\(' src/__tests__/*.test.ts src/components/__tests__/*.test.ts` agree on **313**, not 316 — an earlier claim of "measured 316" for this same commit does not reproduce and was not carried into this table |
 | `check:css` | `node scripts/build-css.mjs --check` | both `src/styles.css` and `src/code.css` up to date |
-| picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **not re-run here** — disproportionate to re-execute a real-Chromium suite for a docs-only pickup. Last confirmed run: `.ai/projects/done/26-08-22-00-ui/CLOSEOUT.md:76`, `test:picker-layout` **GREEN 21/21** (real Chromium, ~22s) |
+| picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **not re-run against a bare checkout of this file's pickup commit** — disproportionate to re-execute a real-Chromium suite a second time for that alone. Confirmed **GREEN 22/22** (matching the corrected `EXPECTED_TESTS` in fact 4 above) as part of T1.1.3's own gates, run against this commit plus that task's changes — `.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md` |
 
 The `lint:tokens` line above is **pinned** by this project's own T1.1.1: it dropped
 `_step-builder.scss`'s violations from a red 4-vs-baseline-3 regression back to a clean, matching
@@ -145,7 +145,7 @@ So:
   `git diff <base>..<verified-sha> --stat` over `packages/ui` is one command and tells you exactly
   which of the facts above are ahead of you.
 
-verified: 2026-08-25 · against `main` @ `6cd7f48` (project 26-08-22-02-ui-planner-and-token-debt, closeout)
+verified: 2026-08-26 · against `main` @ `8c46f9a` (project 26-08-26-01-studio-fixes, T1.1.3)
 
 **What this project changed here, at a glance** — this file did not exist before
 `26-08-22-02-ui-planner-and-token-debt`; `packages/ui/.ai/` had zero prior art, and this task
@@ -154,4 +154,7 @@ verified: 2026-08-25 · against `main` @ `6cd7f48` (project 26-08-22-02-ui-plann
 dropped `_step-builder.scss`'s `lint:tokens` entry from a red 4-vs-baseline-3 regression to a clean
 match, which is what the *Gate baselines* table above records as the whole-package `59 violations in
 18 files (baseline: 59)` total — replacing the older, now twice-stale `62/19` figure that
-`studio-ui-gate-baselines.md` still carries.
+`studio-ui-gate-baselines.md` still carries. `26-08-26-01-studio-fixes`'s T1.1.3 corrected fact 4
+(the `test/picker-layout` `EXPECTED_TESTS` default and matching `test(` count, both `21`→`22`) and
+re-verified — not changed — the unit-suite baseline (`313`, not the `316` an earlier pass through
+this file had assumed without re-measuring against the pickup commit it named).
