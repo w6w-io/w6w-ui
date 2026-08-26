@@ -3,6 +3,17 @@
 # script, and that unresolved value makes a later `pnpm install` exit non-zero —
 # which is what put the frontend dev container into a restart loop once (see the
 # same list in packages/frontend/pnpm-workspace.yaml).
+# `@w6w/expr`'s real dependency spec (in package.json) is the git-installable
+# form real consumers need: `github:w6w-io/w6w-core#path:packages/expr`. That
+# spec is fine for anyone installing `@w6w/ui` from outside this repo, but
+# inside it we want the LIVE sibling checkout — no GitHub fetch on every
+# install, and local edits to packages/core picked up immediately. This
+# override is local-only: it does not propagate to anyone who installs
+# `@w6w/ui` as their own dependency (pnpm overrides apply only to the project
+# that declares them), so the real spec above is what they actually get.
+overrides:
+  '@w6w/expr': 'link:../core/packages/expr'
+
 allowBuilds:
   # Both ship a prebuilt native binary that their install script links into
   # place. `pnpm lint` / `pnpm build` invoke exactly those binaries, so skipping
