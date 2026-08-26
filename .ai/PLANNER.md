@@ -62,13 +62,15 @@ small and authoritative for two specific surfaces — see the routing table belo
    ```
    "test": "node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts"
    ```
-   Both roots are real and both matter: `src/__tests__/*.test.ts` (21 files at this file's pickup
-   commit) and `src/components/__tests__/*.test.ts` (8 files: `Copyable`, `DeleteButton`,
-   `EditButton`, `HistoryTimeline`, `IconButton`, `UptimeStrip`, `expression-dom`,
-   `expression-template`). The trap survives the fix that added the second root: a `.test.ts` file
-   placed in a **third** location, or named `.test.tsx`, silently never runs — the loader
-   (`src/test-jsx-loader.mjs:16-20`) transpiles `.tsx` on import, but the `--test` arguments above
-   are `.test.ts` globs only, so a `.tsx`-named test file is never even discovered.
+   Both roots are real and both matter: `src/__tests__/*.test.ts` (23 files as of `main` @ `895e25d`
+   — `26-08-26-01-studio-fixes` added `StepBuilderModal.app-triggers.test.ts` and
+   `WorkflowFlowEditor.webhook-url.test.ts`) and `src/components/__tests__/*.test.ts` (9 files:
+   `Copyable`, `CopyableText`, `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`,
+   `UptimeStrip`, `expression-dom`, `expression-template` — same project added `CopyableText.test.ts`).
+   The trap survives the fix that added the second root: a `.test.ts` file placed in a **third**
+   location, or named `.test.tsx`, silently never runs — the loader (`src/test-jsx-loader.mjs:16-20`)
+   transpiles `.tsx` on import, but the `--test` arguments above are `.test.ts` globs only, so a
+   `.tsx`-named test file is never even discovered.
 
 4. **`test/picker-layout/` is a real-Chromium gate with a pinned test count.**
    `test/picker-layout/run.sh:64`: `EXPECTED_TESTS="${EXPECTED_TESTS:-22}"`; `:161-163` is the
@@ -105,11 +107,12 @@ framing (its TRAP 2 section).
 | gate | command | result |
 |---|---|---|
 | token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** |
-| lint | `./node_modules/.bin/biome check .` | `Checked 88 files in 32ms. No fixes applied.` — 0 errors |
+| lint | `./node_modules/.bin/biome check .` | `Checked 92 files in 30ms. No fixes applied.` — 0 errors (was 88 files before `26-08-26-01-studio-fixes` added `CopyableText.tsx` + its 3 new test files) |
 | typecheck | `./node_modules/.bin/tsc -b --noEmit` | exit 0, no output |
-| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **313 pass, 0 fail** (TAP: `tests 313 · pass 313 · fail 0`) — re-verified by T1.1.3 against a clean `git archive` of this file's own pickup commit (`8c46f9a`): both the runtime TAP total and a static `grep -c '^\s*test\(' src/__tests__/*.test.ts src/components/__tests__/*.test.ts` agree on **313**, not 316 — an earlier claim of "measured 316" for this same commit does not reproduce and was not carried into this table |
+| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **335 pass, 0 fail** (TAP: `tests 335 · pass 335 · fail 0`) on `main` @ `895e25d`, post-merge of `26-08-26-01-studio-fixes` (was **313** at this file's original pickup commit `8c46f9a` — that number is history, not current; re-run rather than cite it) |
 | `check:css` | `node scripts/build-css.mjs --check` | both `src/styles.css` and `src/code.css` up to date |
-| picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **not re-run against a bare checkout of this file's pickup commit** — disproportionate to re-execute a real-Chromium suite a second time for that alone. Confirmed **GREEN 22/22** (matching the corrected `EXPECTED_TESTS` in fact 4 above) as part of T1.1.3's own gates, run against this commit plus that task's changes — `.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md` |
+| picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **GREEN 22/22** (matching `EXPECTED_TESTS` in fact 4 above), confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates — not re-run again at closeout since the merge introduced no further picker-layout-touching change beyond what T1.1.3 already gated |
+| copyable (Docker/Chromium) | `bash test/copyable/run.sh` | **GREEN 9/9**, confirmed by the same T1.1.3 gates (`.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md`) — not re-run again at closeout for the same reason |
 
 The `lint:tokens` line above is **pinned** by this project's own T1.1.1: it dropped
 `_step-builder.scss`'s violations from a red 4-vs-baseline-3 regression back to a clean, matching
@@ -145,7 +148,7 @@ So:
   `git diff <base>..<verified-sha> --stat` over `packages/ui` is one command and tells you exactly
   which of the facts above are ahead of you.
 
-verified: 2026-08-26 · against `main` @ `8c46f9a` (project 26-08-26-01-studio-fixes, T1.1.3)
+verified: 2026-08-26 · against `main` @ `895e25d` (project 26-08-26-01-studio-fixes closeout, post-merge)
 
 **What this project changed here, at a glance** — this file did not exist before
 `26-08-22-02-ui-planner-and-token-debt`; `packages/ui/.ai/` had zero prior art, and this task
@@ -156,5 +159,9 @@ match, which is what the *Gate baselines* table above records as the whole-packa
 18 files (baseline: 59)` total — replacing the older, now twice-stale `62/19` figure that
 `studio-ui-gate-baselines.md` still carries. `26-08-26-01-studio-fixes`'s T1.1.3 corrected fact 4
 (the `test/picker-layout` `EXPECTED_TESTS` default and matching `test(` count, both `21`→`22`) and
-re-verified — not changed — the unit-suite baseline (`313`, not the `316` an earlier pass through
-this file had assumed without re-measuring against the pickup commit it named).
+re-verified — not changed — the unit-suite baseline as measured at its own pickup commit (`313`, not
+the `316` an earlier pass through this file had assumed without re-measuring against the pickup
+commit it named). **At this project's own closeout** (merge to `main` @ `895e25d`), the unit suite,
+biome file count, and both test-root file counts in fact 3 were re-measured again and bumped to their
+current post-merge values (`335` pass, `92` biome files, `23`/`9` test files) — the `313`/`88`/`21`/`8`
+figures above are now history, kept only where a sentence explicitly compares against them.
