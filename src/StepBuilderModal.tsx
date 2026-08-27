@@ -1807,7 +1807,7 @@ function ReadyToUseFlow({
   /** One column: a heading and its rows. Rendered only when it HAS rows. */
   const column = (title: string, rows: ReactNode[]) =>
     rows.length === 0 ? null : (
-      <section className="w6w-readytouse-col">
+      <section key={title} className="w6w-readytouse-col">
         <h4 className="w6w-readytouse-heading">{title}</h4>
         <div className="w6w-stepbuilder-list w6w-stepbuilder-scroll">{rows}</div>
       </section>
