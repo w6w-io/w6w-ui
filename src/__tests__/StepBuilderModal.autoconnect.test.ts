@@ -259,3 +259,33 @@ test("case E: not auto-satisfied, no connections — picking the action does not
     root.unmount();
   });
 });
+
+// Case F (CLOSEOUT-FIX-2) — an `apiKey`-typed entry carrying a manifest-declared
+// `autoSatisfied: true` must NOT be treated as auto-satisfied: only
+// `tenantAuth`/`jit` may. `needsConnection` stays `true`, the "needs a
+// connection" empty state renders (the picker), and picking the action alone
+// must not commit without a connection.
+test("case F: apiKey with autoSatisfied: true is NOT auto-satisfied — needsConnection stays true", async () => {
+  const { container, root, onAddCalls } = await mount(
+    async () => [{ key: "pat", type: "apiKey", available: true, autoSatisfied: true }],
+    async () => [],
+  );
+
+  await pickAction(container);
+
+  assert.equal(onAddCalls.length, 0, "no connection exists, so setup must not commit");
+
+  const text = container.textContent ?? "";
+  assert.ok(
+    text.includes("This app needs a connection before its actions can run."),
+    "the connection-needed empty state must still render — apiKey is never auto-satisfied",
+  );
+  assert.ok(
+    !text.includes("Connected automatically"),
+    "the passive auto-satisfied copy must NOT render for a non-tenantAuth/jit type",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
