@@ -23,6 +23,12 @@ export interface AppSummary {
   maturity?: string;
   visibility?: string;
   successor?: string;
+  /**
+   * True when the calling tenant has zero-credential access flagged for this
+   * app — usable with no connection step at all (server-computed per caller;
+   * `packages/server/packages/api/wire-summary.ts`'s `zeroCredential`).
+   */
+  zeroCredential?: boolean;
 }
 
 /** One trigger an app declares, as returned by GET /apps/:id/triggers. */
