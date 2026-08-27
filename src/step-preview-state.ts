@@ -11,7 +11,7 @@
  */
 import type { Edge } from "@xyflow/react";
 import type { ExpressionStepSource } from "./components/ExpressionOptions.tsx";
-import { internalNodeDef } from "./flow-types.ts";
+import { TRIGGER_APP, internalNodeDef } from "./flow-types.ts";
 import type { StepNode } from "./flow-utils.ts";
 import type { StepStartState, StepTest } from "./provider.tsx";
 import { asFieldDefs, fieldsToParams } from "./trigger-fields.ts";
@@ -81,10 +81,14 @@ function projectStepSources(
       hasTrigger = true;
     }
     // Declared output fields, via the shared trigger-field projection — the one
-    // parser, which already skips a blank/missing `key`. TRIGGER-ONLY: on any
-    // other node `with.fields` is that action's INPUT, and projecting it would
-    // fabricate declared outputs the step never produces.
-    const declared = isTrigger ? fieldsToParams(asFieldDefs(step.with?.fields)) : [];
+    // parser, which already skips a blank/missing `key`. MANUAL-TRIGGER-ONLY: a
+    // webhook/scheduler entry node's `with.fields` payload is `trigger.event`
+    // (see the file-header-level doc below), not `steps.<id>.output`, so it must
+    // not be projected here; on any other node `with.fields` is that action's
+    // INPUT, and projecting it would fabricate declared outputs the step never
+    // produces.
+    const isManualTrigger = isTrigger && step.uses.app === TRIGGER_APP;
+    const declared = isManualTrigger ? fieldsToParams(asFieldDefs(step.with?.fields)) : [];
     const source: ExpressionStepSource = { id: step.id, label: step.id };
     // OMITTED (not `[]`) when nothing is declared, so a consumer can tell
     // "nothing declared" from "declared none". Keys are verbatim: each becomes
@@ -113,25 +117,29 @@ function projectStepSources(
  * `steps.<id>.output`. Offering only the former is why a trigger's declared
  * fields were unreachable from the picker.
  *
- * A **trigger** that declares output fields (`with.fields`) carries them as
- * `outputs`, so a consumer can offer `steps.<id>.output.<key>` per field. Only a
- * trigger: `fields` is an ordinary param name, and on any other node it holds
- * that action's INPUT — an `@w6w/http:request` with `with.fields = [{key:"x"}]`
- * would otherwise be advertised as declaring an output `x` it never produces.
- * The trigger's `fields` is the one case where the param IS the output contract
- * (`core/rfcs/node-types.md:194-196`; `trigger.md:119` covers only what drives
- * editor autocomplete).
+ * A **manual trigger** that declares output fields (`with.fields`) carries
+ * them as `outputs`, so a consumer can offer `steps.<id>.output.<key>` per
+ * field. Only a manual trigger: `fields` is an ordinary param name, and on any
+ * other node — including a webhook/scheduler entry node, whose payload is
+ * `trigger.event` instead (see the ⚠️ note below) — it holds that action's
+ * INPUT; an `@w6w/http:request` with `with.fields = [{key:"x"}]` would
+ * otherwise be advertised as declaring an output `x` it never produces. The
+ * manual trigger's `fields` is the one case where the param IS the output
+ * contract (`core/rfcs/node-types.md:194-196`; `trigger.md:119` covers only
+ * what drives editor autocomplete).
  *
- * ⚠️ EDITOR-SIDE ONLY. Do not read this as "those fields resolve at run time".
- * They resolve on the **single-step Test / ▶ Run** path only, and only because
- * this editor sends a start state seeded from the upstream saved fixtures
- * (see {@link startStateFromSeeds}) which `POST /apps/:id/actions/:key/invoke`
- * projects onto `steps.<id>.output`. They are **empty in a full run**:
- * `POST /workflows/:id/run` accepts only `{variables, trigger}` and nothing
- * seeds the entry node's `input`, so `internal-nodes.ts`'s `TRIGGER_APP`
- * returns `params.input ?? {}` → `{}`. Tracked in
- * `.ai/projects/backlog/26-07-29-01-trigger-run-payload.md`; nothing in this
- * file changes it.
+ * ⚠️ These declared fields resolve differently on each run path. On the
+ * **single-step Test / ▶ Run** path (below), this editor sends a start state
+ * seeded from the upstream saved fixtures (see {@link startStateFromSeeds})
+ * which `POST /apps/:id/actions/:key/invoke` projects onto
+ * `steps.<id>.output`. On a **full run**, a manual trigger's declared fields
+ * resolve too: `POST /workflows/:id/run` accepts an `input` body field, and
+ * `run-workflow.ts` seeds the `@w6w/trigger` node's own output with it
+ * (verified by `server/e2e/trigger_run_payload_e2e_test.ts`). A
+ * webhook/scheduler entry node's declared fields do **not** resolve on a full
+ * run — its payload there is `trigger.event`, not `steps.<id>.output`, by
+ * design (`core/rfcs/trigger.md:378`) — which is exactly why the projection
+ * above is narrowed to a manual trigger only.
  *
  * With no specific step (shouldn't happen for a field edit) every node is offered.
  */
