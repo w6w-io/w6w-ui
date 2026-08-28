@@ -158,8 +158,19 @@ function ConnectionConfig({
   const auth: AuthDef | undefined = available.find((a) => a.key === authKey) ?? available[0];
   const fields: AuthField[] = auth?.fields ?? [];
   const isOAuth = auth?.type === "oauth2";
+  // The synthetic "no connection needed" entry `GET /apps/:id/auths` appends
+  // for a zero-credential-flagged tenant (`admin/apps-catalog.ts`) — matched
+  // by `key`, never `type` (its `type` is the existing `"custom"` value,
+  // shared with real custom auth methods; `key: "zero-credential"` is the
+  // one thing only this synthetic entry carries). Selecting it needs no
+  // fields and no real `POST /apps/:id/connections` — the tenant is already
+  // "connected" via the flag (`admin/connections.ts`'s own synthetic
+  // `zerocred:<appId>` summary), so submitting here just reports that same
+  // id back rather than creating a second, real row for nothing to store.
+  const isZeroCred = auth?.key === "zero-credential";
   const requiredMissing =
     !isOAuth &&
+    !isZeroCred &&
     fields.some((f) => f.required && (credential[f.key] === undefined || credential[f.key] === ""));
 
   async function submit() {
@@ -167,7 +178,9 @@ function ConnectionConfig({
     setError(null);
     setPending(true);
     try {
-      if (isOAuth) {
+      if (isZeroCred) {
+        onCreated({ connectionId: `zerocred:${app.id}` });
+      } else if (isOAuth) {
         const { authorizationUrl } = await api.startAppOAuthFlow(app.id, auth.key, {
           displayName: displayName || undefined,
         });
@@ -221,26 +234,28 @@ function ConnectionConfig({
 
       {auth && (
         <>
-          <label className="w6w-field">
-            <span>Display name</span>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. Production API key"
-              maxLength={80}
-              // A plain text field above a credential field gets treated as the
-              // "username" of a login form and prefilled — opt it out.
-              name="w6w-connection-label"
-              autoComplete="off"
-              data-1p-ignore="true"
-              data-lpignore="true"
-              data-bwignore="true"
-              data-form-type="other"
-            />
-          </label>
+          {!isZeroCred && (
+            <label className="w6w-field">
+              <span>Display name</span>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="e.g. Production API key"
+                maxLength={80}
+                // A plain text field above a credential field gets treated as the
+                // "username" of a login form and prefilled — opt it out.
+                name="w6w-connection-label"
+                autoComplete="off"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-bwignore="true"
+                data-form-type="other"
+              />
+            </label>
+          )}
           {auth.description && <p className="w6w-muted w6w-small">{auth.description}</p>}
-          {isOAuth ? (
+          {isZeroCred ? null : isOAuth ? (
             <p className="w6w-muted w6w-small">
               You'll be redirected to <strong>{auth.displayName ?? auth.key}</strong> to authorize
               this connection.
@@ -260,16 +275,20 @@ function ConnectionConfig({
         <button
           type="button"
           className="w6w-btn"
-          disabled={!auth || (!isOAuth && requiredMissing) || pending}
+          disabled={!auth || (!isOAuth && !isZeroCred && requiredMissing) || pending}
           onClick={submit}
         >
           {pending
-            ? isOAuth
-              ? "Waiting for authorization…"
-              : "Saving…"
-            : isOAuth
-              ? `Sign in with ${auth?.displayName ?? auth?.key ?? "provider"}`
-              : "Save connection"}
+            ? isZeroCred
+              ? "Saving…"
+              : isOAuth
+                ? "Waiting for authorization…"
+                : "Saving…"
+            : isZeroCred
+              ? "Use this"
+              : isOAuth
+                ? `Sign in with ${auth?.displayName ?? auth?.key ?? "provider"}`
+                : "Save connection"}
         </button>
       </div>
     </div>

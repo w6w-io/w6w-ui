@@ -37,10 +37,11 @@ type TestState =
  * form reads and writes the same fixture, so values entered on either surface
  * come back on the other.
  *
- * That persistence is **local to testing**. It does not reach a production
- * workflow run: `POST /workflows/:id/run` takes only `{variables, trigger}` and
- * the trigger handler sees `params.input === undefined` there (filed as
- * `.ai/projects/backlog/26-07-29-01-trigger-run-payload.md`).
+ * That persistence is **local to testing**. It does not by itself reach a
+ * production workflow run: `POST /workflows/:id/run` does accept an `input`
+ * body field, and a manual trigger's handler now sees it as `params.input`
+ * (`run-workflow.ts:391`), but nothing wires this form's saved `step_tests`
+ * fixture into that call — a caller has to pass `input` itself.
  */
 export function TriggerFillForm({
   app,

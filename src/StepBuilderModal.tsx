@@ -1702,7 +1702,15 @@ function useReadyToUse(callables: readonly ("function" | "workflow")[]): ReadyTo
   }
   // Reserved `@w6w/*` pseudo-apps are never connectable — they are added from
   // the Controls/Utilities tabs, exactly as `AppPicker` excludes them.
-  const apps = allApps.filter((a) => !isInternalApp(a.id) && connectedIds.has(a.id));
+  //
+  // "Ready to use" means EITHER an actual Connection exists OR the app needs
+  // none at all — a zero-credential-flagged app's whole point is that its
+  // tenant's users get the declared tenantAuth/jit path with no connection
+  // step, so requiring `connectedIds.has(a.id)` alone hid it from the one tab
+  // it is MOST meant to appear in.
+  const apps = allApps.filter(
+    (a) => !isInternalApp(a.id) && (connectedIds.has(a.id) || a.zeroCredential === true),
+  );
   const empty = apps.length === 0 && fns.length === 0 && wfs.length === 0;
   return { state: empty ? "empty" : "ready", apps, fns, wfs };
 }

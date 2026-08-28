@@ -1,7 +1,7 @@
 // Run: node --test src/__tests__/step-preview-state.test.ts  (Node 24, type-stripped)
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TRIGGER_APP } from "../flow-types.ts";
+import { SCHEDULER_APP, TRIGGER_APP, WEBHOOK_APP } from "../flow-types.ts";
 import type { StepNode } from "../flow-utils.ts";
 import type { StepTest } from "../provider.tsx";
 import {
@@ -103,5 +103,33 @@ test("upstreamStateSources — a manual trigger ancestor is flagged and carries 
   assert.deepEqual(
     steps.find((s) => s.id === "gate_1")?.outputs?.map((o) => o.key),
     ["to", "first_name"],
+  );
+});
+
+test("upstreamStateSources — a webhook entry node is still flagged as hasTrigger, but its with.fields must NOT project as outputs", () => {
+  const trig = node("gate_1", WEBHOOK_APP, "webhook");
+  trig.data.step.with = { fields: [{ key: "to" }, { key: "first_name" }] };
+  const nodes = [trig, node("mid")];
+  const edges = [edge("gate_1", "mid")];
+  const { steps, hasTrigger } = upstreamStateSources("mid", nodes, edges);
+  assert.equal(hasTrigger, true, "hasTrigger must stay true for a webhook entry node");
+  assert.equal(
+    steps.find((s) => s.id === "gate_1")?.outputs,
+    undefined,
+    "webhook must project NO outputs",
+  );
+});
+
+test("upstreamStateSources — a scheduler entry node is still flagged as hasTrigger, but its with.fields must NOT project as outputs", () => {
+  const trig = node("gate_1", SCHEDULER_APP, "schedule");
+  trig.data.step.with = { fields: [{ key: "to" }, { key: "first_name" }] };
+  const nodes = [trig, node("mid")];
+  const edges = [edge("gate_1", "mid")];
+  const { steps, hasTrigger } = upstreamStateSources("mid", nodes, edges);
+  assert.equal(hasTrigger, true, "hasTrigger must stay true for a scheduler entry node");
+  assert.equal(
+    steps.find((s) => s.id === "gate_1")?.outputs,
+    undefined,
+    "scheduler must project NO outputs",
   );
 });
