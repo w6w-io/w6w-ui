@@ -62,11 +62,12 @@ small and authoritative for two specific surfaces — see the routing table belo
    ```
    "test": "node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts"
    ```
-   Both roots are real and both matter: `src/__tests__/*.test.ts` (23 files as of `main` @ `895e25d`
-   — `26-08-26-01-studio-fixes` added `StepBuilderModal.app-triggers.test.ts` and
-   `WorkflowFlowEditor.webhook-url.test.ts`) and `src/components/__tests__/*.test.ts` (9 files:
-   `Copyable`, `CopyableText`, `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`,
-   `UptimeStrip`, `expression-dom`, `expression-template` — same project added `CopyableText.test.ts`).
+   Both roots are real and both matter: `src/__tests__/*.test.ts` (**24** files as of `main` @
+   `f846edc` — up from 23 at `895e25d` via `StepBuilderModal.autoconnect.test.ts`, added by an
+   unrelated merged project, `feat(stepbuilder): third connection state`) and
+   `src/components/__tests__/*.test.ts` (9 files, unchanged: `Copyable`, `CopyableText`,
+   `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`, `UptimeStrip`, `expression-dom`,
+   `expression-template`).
    The trap survives the fix that added the second root: a `.test.ts` file placed in a **third**
    location, or named `.test.tsx`, silently never runs — the loader (`src/test-jsx-loader.mjs:16-20`)
    transpiles `.tsx` on import, but the `--test` arguments above are `.test.ts` globs only, so a
@@ -107,9 +108,9 @@ framing (its TRAP 2 section).
 | gate | command | result |
 |---|---|---|
 | token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** |
-| lint | `./node_modules/.bin/biome check .` | `Checked 92 files in 30ms. No fixes applied.` — 0 errors (was 88 files before `26-08-26-01-studio-fixes` added `CopyableText.tsx` + its 3 new test files) |
+| lint | `./node_modules/.bin/biome check .` | `Checked 93 files in 33ms. No fixes applied.` — 0 errors (was 92 files at `895e25d`; +1 from `StepBuilderModal.autoconnect.test.ts`, an unrelated merged project) |
 | typecheck | `./node_modules/.bin/tsc -b --noEmit` | exit 0, no output |
-| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **335 pass, 0 fail** (TAP: `tests 335 · pass 335 · fail 0`) on `main` @ `895e25d`, post-merge of `26-08-26-01-studio-fixes` (was **313** at this file's original pickup commit `8c46f9a` — that number is history, not current; re-run rather than cite it) |
+| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **340 pass, 0 fail** (TAP: `tests 340 · pass 340 · fail 0`) on `main` @ `f846edc`, post-merge of `26-08-07-01-ui-dblclick-test-receiver-pin` (was **335** at `895e25d` — that number is history, not current; re-run rather than cite it). This project added 0 new tests (it added assertions inside an existing test, `WorkflowFlowEditor.dblclick-wiring.test.ts`'s add/remove-pair case) — the +5 vs `895e25d` is entirely `StepBuilderModal.autoconnect.test.ts`, an unrelated merged project. |
 | `check:css` | `node scripts/build-css.mjs --check` | both `src/styles.css` and `src/code.css` up to date |
 | picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **GREEN 22/22** (matching `EXPECTED_TESTS` in fact 4 above), confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates — not re-run again at closeout since the merge introduced no further picker-layout-touching change beyond what T1.1.3 already gated |
 | copyable (Docker/Chromium) | `bash test/copyable/run.sh` | **GREEN 9/9**, confirmed by the same T1.1.3 gates (`.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md`) — not re-run again at closeout for the same reason |
@@ -148,7 +149,7 @@ So:
   `git diff <base>..<verified-sha> --stat` over `packages/ui` is one command and tells you exactly
   which of the facts above are ahead of you.
 
-verified: 2026-08-26 · against `main` @ `895e25d` (project 26-08-26-01-studio-fixes closeout, post-merge)
+verified: 2026-08-28 · against `main` @ `f846edc` (project 26-08-07-01-ui-dblclick-test-receiver-pin closeout, post-merge)
 
 **What this project changed here, at a glance** — this file did not exist before
 `26-08-22-02-ui-planner-and-token-debt`; `packages/ui/.ai/` had zero prior art, and this task
@@ -161,7 +162,27 @@ match, which is what the *Gate baselines* table above records as the whole-packa
 (the `test/picker-layout` `EXPECTED_TESTS` default and matching `test(` count, both `21`→`22`) and
 re-verified — not changed — the unit-suite baseline as measured at its own pickup commit (`313`, not
 the `316` an earlier pass through this file had assumed without re-measuring against the pickup
-commit it named). **At this project's own closeout** (merge to `main` @ `895e25d`), the unit suite,
+commit it named). **At `26-08-26-01-studio-fixes`'s own closeout** (merge to `main` @ `895e25d`), the unit suite,
 biome file count, and both test-root file counts in fact 3 were re-measured again and bumped to their
 current post-merge values (`335` pass, `92` biome files, `23`/`9` test files) — the `313`/`88`/`21`/`8`
-figures above are now history, kept only where a sentence explicitly compares against them.
+figures above are history, kept only where a sentence explicitly compares against them.
+
+**At `26-08-07-01-ui-dblclick-test-receiver-pin`'s closeout** (merge to `main` @ `f846edc`): this
+project pinned the receiver in `WorkflowFlowEditor.dblclick-wiring.test.ts`'s add/remove-pair
+assertion (a real listener-leak mutant — registering on `document`, cleaning up on `div` — used to
+pass the suite undetected) and fixed two stale comments; it added 0 new tests and 0 new files. The
+unit suite, biome file count and fact 3's `src/__tests__` count were re-measured and bumped again to
+their current post-merge values (`340` pass, `93` biome files, `24`/`9` test files) — but that delta
+is **not** this project's own: it is entirely `StepBuilderModal.autoconnect.test.ts`, added by a
+different, unrelated project (`feat(stepbuilder): third connection state`) that merged to `main`
+between this file's two verifications. `335`/`92`/`23` are now history.
+
+**Also worth knowing for future work here**: this project found a harness-tooling gap, not a
+`packages/ui` code gap — `workspace-up.sh`'s sibling-closure detection (in
+`.orchestration/projects/_templates/tools/`) only reads `../`-pattern deps in `package.json`/
+`deno.json`, and misses `packages/ui/pnpm-workspace.yaml`'s `overrides: '@w6w/expr':
+'link:../core/packages/expr'` — so a harness workspace built with `repos: [ui]` silently gets no
+`core` sibling symlink, and every gate in that lane reads a large false-red (227/216/11 tests, 5 tsc
+errors) that has nothing to do with whatever the task actually changed. Not a `packages/ui` defect —
+recorded here because the next planner scoping a `ui`-only harness project needs to know to check
+for `.worktrees/<project-id>/core` before trusting a red gate in that lane.

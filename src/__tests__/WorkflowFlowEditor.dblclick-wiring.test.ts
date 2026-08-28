@@ -7,7 +7,7 @@
 // cases pin THAT mechanism: no leftover prop, a matched add/remove pair, the
 // empty-pane no-op guard, and — the round-1 gate gap — that nothing can be
 // smuggled between `stopPropagation()` and `onEdit(id)` (an M8-equivalent
-// `if (readOnly) return;` insertion there now fails case 4 below).
+// `if (readOnly) return;` insertion there now fails case 5 below).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -182,6 +182,12 @@ test("a capture-phase dblclick listener is added and removed as a matched pair",
     "must be registered on the CAPTURE phase — that's the only ordering that runs before the pane's own bubble-phase dblclick.zoom listener",
   );
   const handlerName = (add.arguments[1] as ts.Identifier).text;
+  const receiver = (add.expression as ts.PropertyAccessExpression).expression;
+  assert.equal(
+    receiver.getText(sf),
+    "div",
+    "must register on the flow container div, not some other element (e.g. document)",
+  );
 
   const ret = (body as ts.Block).statements.find((s) => ts.isReturnStatement(s));
   assert.ok(ret, "the effect must return a cleanup function");
@@ -201,6 +207,12 @@ test("a capture-phase dblclick listener is added and removed as a matched pair",
     (remove.arguments[1] as ts.Identifier).text,
     handlerName,
     "cleanup must remove the exact function identity that was added — a matched pair, not just any cleanup",
+  );
+  const removeReceiver = (remove.expression as ts.PropertyAccessExpression).expression;
+  assert.equal(
+    removeReceiver.getText(sf),
+    receiver.getText(sf),
+    "cleanup must remove the listener from the SAME receiver it was added on — a real leak (add on document, remove on div) must fail here",
   );
 });
 
