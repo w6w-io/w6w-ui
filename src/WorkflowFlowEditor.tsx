@@ -816,9 +816,11 @@ function Inner({
   //
   // The guard matters specifically in `readOnly`: `nodesDraggable={!readOnly}`
   // below drops `nopan` from the node wrapper's class list for a non-draggable
-  // node, and `@xyflow/system`'s zoom filter only rejects events inside
-  // `.nopan` — so without this listener winning the race, a viewer's
-  // double-click silently zooms the canvas instead of opening the modal.
+  // node, and for THIS scenario — a non-wheel double-click with no active
+  // selection or connection in progress — `@xyflow/system`'s zoom filter's
+  // remaining check is `.nopan` — so without this listener winning the race,
+  // a viewer's double-click silently zooms the canvas instead of opening the
+  // modal.
   useEffect(() => {
     const div = flowContainerRef.current;
     if (!div) return;
