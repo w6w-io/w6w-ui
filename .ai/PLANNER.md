@@ -11,7 +11,7 @@
 Almost every change lands in `src/`, which splits three ways: **14** top-level `.tsx` files (large,
 often multi-export modules — e.g. `AppPicker.tsx`, and `StepBuilderModal.tsx`, which bundles
 `NodeList`, `CallableList`, `CallableRow` and `ReadyToUseFlow` as sibling functions in one file; see
-fact 1), **21** smaller components under `src/components/`, and **28** SCSS partials under
+fact 1), **22** smaller components under `src/components/`, and **28** SCSS partials under
 `src/styles/` that compile into the two committed `.css` bundles (fact 2). `scripts/` holds two
 small Node-only build/lint tools, each documented by its own header docstring — read the docstring
 before the script body (`scripts/build-css.mjs:1-21`, `scripts/lint-tokens.mjs:1-29`). `test/` holds
@@ -203,3 +203,13 @@ in `--w6w-*` tokens (font-size, gap) plus box-geometry properties the ratchet do
 errors) that has nothing to do with whatever the task actually changed. Not a `packages/ui` defect —
 recorded here because the next planner scoping a `ui`-only harness project needs to know to check
 for `.worktrees/<project-id>/core` before trusting a red gate in that lane.
+
+**T1.1.1 round 2** (same branch, same fork point) corrected a pre-existing drift the round-1 pass
+didn't touch: *Where work happens* read `21` smaller components under `src/components/`, already
+wrong at this file's own `verified:` commit (`f846edc`) — `22` there and `22` at this branch's own
+HEAD (`find src/components -maxdepth 1 -type f ! -name '*.stories.tsx' | wc -l`, excluding the
+`__tests__` subdirectory `git ls-tree` also lists). Corrected to `22`. It also rewrote the stale
+`ExpressionEditorModal.tsx:106-107` comment claiming a render part can only ever be authored by
+toggling an existing `var` chip — round 1's own D-P1 feature (the insert-as-render action) inserts
+one directly, so the comment now describes both authoring paths. No behavior change; no gate figure
+moved.

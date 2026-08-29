@@ -103,10 +103,12 @@ export function ExpressionEditorModal({
     setParts(readParts(el));
   };
 
-  // A render part can only ever be authored by flipping an EXISTING var chip
-  // (below) — never inserted directly — so this is derived from `parts` on
-  // every render, not computed once at mount: flipping mid-edit must disable
-  // the control below immediately, and flipping back must re-enable it.
+  // A render part can be authored two ways: flipping an EXISTING var chip
+  // (below), or inserting one directly via a document field's "insert as
+  // render" action (the Documents group's field sub-source loop, below) — so
+  // this is derived from `parts` on every render, not computed once at mount:
+  // either path must disable the control below immediately, and flipping the
+  // toggled chip back must re-enable it.
   const hasRenderPart = parts.some((p) => p.kind === "render");
 
   // Adopt a text form as the parts and repaint the chips editor — the
