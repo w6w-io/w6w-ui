@@ -2591,6 +2591,11 @@ export function AppConnectionOnlyConfig({
                   Create connection
                 </button>
               </div>
+              {/* P3a / HITL-8's pinned default: auto-connect is synchronous-only
+                  (HITL-4) — a queued/scheduled Run of this saved workflow drops
+                  `subjectToken` before it reaches the invoke path, so it still
+                  needs a connection configured on the step. Nothing server-side
+                  changes; this is the editor telling the truth about that limit. */}
               <span className="w6w-hint">
                 A scheduled or queued run of this workflow still needs a connection configured on
                 this step — use "Create connection" if this step will run on a schedule.
