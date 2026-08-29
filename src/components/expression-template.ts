@@ -171,6 +171,16 @@ export function valueToParts(value: ExprValue | string | SecretValue | undefined
  * (keyed by full ref) or renders `""` when unresolved — never the raw
  * `{{ ref }}` template token — and a `secret` part always masks as `•••`.
  *
+ * A `render` part resolves through the exact SAME flat `samples` lookup as
+ * `var` (A4c) — it does NOT additionally substitute `{{ }}` markers inside the
+ * resolved value. That substitution is the engine's `resolveRenderPart`
+ * (`packages/w6w-workflow/packages/engine/src/expr.ts`, out of scope), which
+ * runs against a real run scope; this design-time preview has no run scope to
+ * substitute against, so it shows the field's raw template text verbatim, same
+ * as `var` would. Without at least the flat-lookup half, the new
+ * insert-as-render action's very first click would leave the Result pane
+ * blank, which reads as broken.
+ *
  * No client-side evaluator for `expr` parts (see the TODO in
  * `ExpressionEditorModal.tsx`) — those fall back to their `{{ }}` template
  * form.
@@ -182,7 +192,8 @@ export function renderResult(parts: ExprPart[], samples: Record<string, string>)
       case "text":
         out += p.value ?? "";
         break;
-      case "var": {
+      case "var":
+      case "render": {
         const ref = p.ref ?? "";
         out += ref in samples ? samples[ref] : "";
         break;

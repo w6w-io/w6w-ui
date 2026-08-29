@@ -162,13 +162,17 @@ export function ExpressionEditorModal({
     return { ...seeded, ...samples };
   }, [options.sampleValues, samples]);
 
-  // The distinct var refs the current expression reads (first-seen order) — the
-  // in-scope roots the author can supply sample values for.
+  // The distinct var/render refs the current expression reads (first-seen
+  // order) — the in-scope roots the author can supply sample values for. A
+  // `render` part reads through the same sample lookup as `var` (A4c), so its
+  // ref belongs here too — otherwise the Sample-values box never offers a row
+  // for it and the Result pane's first click on the new insert-render action
+  // reads as broken (blank output).
   const usedRefs = useMemo(() => {
     const seen = new Set<string>();
     const refs: string[] = [];
     for (const p of parts) {
-      if (p.kind === "var" && p.ref && !seen.has(p.ref)) {
+      if ((p.kind === "var" || p.kind === "render") && p.ref && !seen.has(p.ref)) {
         seen.add(p.ref);
         refs.push(p.ref);
       }
@@ -299,9 +303,55 @@ export function ExpressionEditorModal({
           <div className="w6w-exprmodal-group">
             <span className="w6w-exprmodal-group-label">Documents</span>
             {documents.length === 0 && <span className="w6w-expr-menu-empty">No documents</span>}
-            {documents.map((d) =>
-              source(d, { kind: "var", ref: `documents.${d}` }, "w6w-expr-chip-var", "▦"),
-            )}
+            {documents.map((d) => {
+              // Same guard, same single render site, as the steps block above:
+              // enumerated raw at the source (studio's `document-sources.ts`),
+              // filtered exactly once, here, where the ref is built (A3, A4a).
+              const fields = (d.fields ?? []).filter((f) => isRefSafeKey(f.key));
+              return (
+                <Fragment key={d.key}>
+                  {/* The whole document — unconditional, for every format,
+                      exactly as before (A2). */}
+                  {source(
+                    d.key,
+                    { kind: "var", ref: `documents.${d.key}` },
+                    "w6w-expr-chip-var",
+                    "▦",
+                  )}
+                  {/* …and one source per surviving top-level field, nested
+                      under it. The label is the field key itself — the parent
+                      row above already shows `d.key` — never `varLabel(ref)`,
+                      which would spell out the whole dotted ref again. Each
+                      row additionally carries a SECOND, visible action (D-P1)
+                      that inserts the SAME ref as a `render` part, so the
+                      placeholder-substitution behaviour is discoverable at the
+                      moment of insertion — not only via the chip's own
+                      post-insertion ⇄ toggle. */}
+                  {fields.length > 0 && (
+                    <div className="w6w-exprmodal-subsources">
+                      {fields.map((f) => {
+                        const ref = `documents.${d.key}.${f.key}`;
+                        return (
+                          <div key={ref} className="w6w-exprmodal-subsource-row">
+                            {source(f.key, { kind: "var", ref }, "w6w-expr-chip-var", "·")}
+                            <button
+                              type="button"
+                              className="w6w-exprmodal-render-btn"
+                              data-testid="expr-insert-render"
+                              title={`Insert ${ref} and render its {{ }} placeholders`}
+                              aria-label={`Insert ${ref} and render its {{ }} placeholders`}
+                              onClick={() => insertPart({ kind: "render", ref })}
+                            >
+                              ▤
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Fragment>
+              );
+            })}
           </div>
 
           {hasState && (
