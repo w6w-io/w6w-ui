@@ -133,6 +133,26 @@ export interface StepBuilderModalProps {
    * Pre-fill the action's parameter values. Requires initialApp and initialAction.
    */
   initialWith?: Record<string, unknown>;
+  /**
+   * Narrow which apps a scoped caller may pick, everywhere an app list is
+   * computed — the "Apps" tab's grid, the "AI" tab's composed filter, and
+   * {@link StepBuilderModalProps.callables}'s "Ready to use" tab. An
+   * `undefined` filter is a no-op; every existing caller (none of which sets
+   * this) is unaffected.
+   */
+  appsFilter?: (app: AppSummary) => boolean;
+  /**
+   * Stop at "a connection is chosen" — no Action, no Configure/Test. Renders
+   * {@link AppConnectionOnlyConfig} in place of the usual `AppStepConfig`
+   * once an app is picked. Used by a caller that only needs a connection
+   * (e.g. binding a repository), not a runnable step.
+   */
+  connectionOnly?: boolean;
+  /**
+   * Fired once, on {@link AppConnectionOnlyConfig}'s footer button — never on
+   * selection alone. Only meaningful with {@link StepBuilderModalProps.connectionOnly}.
+   */
+  onConnected?: (connectionId: string, app: AppSummary) => void;
 }
 
 /** {@link StepBuilderModalProps.callables}'s default — both families. Module
@@ -299,6 +319,9 @@ export function StepBuilderModal({
   initialAction,
   initialConnection,
   initialWith,
+  appsFilter,
+  connectionOnly,
+  onConnected,
 }: StepBuilderModalProps) {
   // Default to the apps the user already connected — no searching for the one
   // integration they use every day.
@@ -323,7 +346,7 @@ export function StepBuilderModal({
   // whether the TAB EXISTS depends on them: nothing connected and nothing
   // built ⇒ no "Ready to use" tab at all. Still `"loading"` counts as present,
   // so the sidebar does not shuffle a beat after it renders.
-  const readyToUse = useReadyToUse(callables);
+  const readyToUse = useReadyToUse(callables, appsFilter);
   const homeAvailable = readyToUse.state !== "empty";
   // If the home tab vanishes while it is the open one, fall to the catalogue
   // rather than rendering a tab body with no tab.
@@ -424,21 +447,33 @@ export function StepBuilderModal({
         <div className="w6w-stepbuilder-config">
           {/* App-switching lives in the Setup tab's "Change" (à la Zapier), not a
               top-right back button. */}
-          <AppStepConfig
-            appId={selectedApp.id}
-            app={selectedApp}
-            onAdd={onAdd}
-            onClose={onClose}
-            onDraftChange={onDraftChange}
-            onChangeApp={() => setSelectedApp(null)}
-            theme={theme}
-            workflowId={workflowId}
-            stepId={stepId}
-            upstreamSteps={upstreamSteps}
-            initialAction={initialAction}
-            initialConnection={initialConnection}
-            initialWith={initialWith}
-          />
+          {connectionOnly ? (
+            <AppConnectionOnlyConfig
+              appId={selectedApp.id}
+              app={selectedApp}
+              onClose={onClose}
+              onChangeApp={() => setSelectedApp(null)}
+              theme={theme}
+              initialConnection={initialConnection}
+              onConnected={(connectionId, app) => onConnected?.(connectionId, app)}
+            />
+          ) : (
+            <AppStepConfig
+              appId={selectedApp.id}
+              app={selectedApp}
+              onAdd={onAdd}
+              onClose={onClose}
+              onDraftChange={onDraftChange}
+              onChangeApp={() => setSelectedApp(null)}
+              theme={theme}
+              workflowId={workflowId}
+              stepId={stepId}
+              upstreamSteps={upstreamSteps}
+              initialAction={initialAction}
+              initialConnection={initialConnection}
+              initialWith={initialWith}
+            />
+          )}
         </div>
       </Modal>
     );
@@ -548,12 +583,12 @@ export function StepBuilderModal({
               onSelect={(t) => setSelectedCallable({ family: "workflow", ...t })}
             />
           ) : tab === "apps" ? (
-            <AppPicker onSelectApp={setSelectedApp} theme={theme} />
+            <AppPicker onSelectApp={setSelectedApp} theme={theme} filter={appsFilter} />
           ) : tab === "ai" ? (
             <AppPicker
               onSelectApp={setSelectedApp}
               theme={theme}
-              filter={(a) => a.categories?.includes("ai") ?? false}
+              filter={(a) => (appsFilter?.(a) ?? true) && (a.categories?.includes("ai") ?? false)}
               searchPlaceholder="Search AI apps…"
               emptyMessage="No AI apps registered yet."
             />
@@ -1655,7 +1690,10 @@ interface ReadyToUse {
   wfs: WorkflowSummary[];
 }
 
-function useReadyToUse(callables: readonly ("function" | "workflow")[]): ReadyToUse {
+function useReadyToUse(
+  callables: readonly ("function" | "workflow")[],
+  appsFilter?: (app: AppSummary) => boolean,
+): ReadyToUse {
   const api = useW6WApi();
   const [connectedIds, setConnectedIds] = useState<Set<string> | null>(null);
   const [allApps, setAllApps] = useState<AppSummary[] | null>(null);
@@ -1709,7 +1747,10 @@ function useReadyToUse(callables: readonly ("function" | "workflow")[]): ReadyTo
   // step, so requiring `connectedIds.has(a.id)` alone hid it from the one tab
   // it is MOST meant to appear in.
   const apps = allApps.filter(
-    (a) => !isInternalApp(a.id) && (connectedIds.has(a.id) || a.zeroCredential === true),
+    (a) =>
+      !isInternalApp(a.id) &&
+      (appsFilter?.(a) ?? true) &&
+      (connectedIds.has(a.id) || a.zeroCredential === true),
   );
   const empty = apps.length === 0 && fns.length === 0 && wfs.length === 0;
   return { state: empty ? "empty" : "ready", apps, fns, wfs };
@@ -2398,6 +2439,250 @@ export function AppStepConfig({
             Next →
           </button>
         )}
+      </div>
+
+      {showConnModal && (
+        <AddConnectionModal
+          theme={theme}
+          initialAppId={appId}
+          onClose={() => setShowConnModal(false)}
+          onCreated={async ({ connectionId: id }) => {
+            setShowConnModal(false);
+            setConnectionId(id);
+            setChangingConn(false);
+            await refetchConns();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * {@link AppStepConfig}'s Setup tab, minus the Action and Configure/Test
+ * gate — for a caller that only needs "a connection is chosen" (e.g. binding
+ * a repository), not a runnable step. Copies its App section and all three
+ * Connection-section branches verbatim, same CSS classes; fetches only
+ * {@link W6WApi.getAppAuth} + {@link W6WApi.listConnectionsForApp} (never
+ * `getAppActions`). Ends in one footer button, gated on `connectionSatisfied`
+ * alone, that fires {@link onConnected} once — never on selection (D-sbm-2).
+ */
+export function AppConnectionOnlyConfig({
+  appId,
+  app,
+  onClose,
+  onChangeApp,
+  theme,
+  initialConnection,
+  onConnected,
+}: {
+  appId: string;
+  app?: AppSummary;
+  onClose: () => void;
+  onChangeApp?: () => void;
+  theme?: ThemeMode;
+  /** Pre-selected connection id */
+  initialConnection?: string;
+  /** Fired once, on the footer button — never on a state change (D-sbm-2). */
+  onConnected: (connectionId: string, app: AppSummary) => void;
+}) {
+  const api = useW6WApi();
+  const [auths, setAuths] = useState<AuthDef[] | null>(null);
+  const [conns, setConns] = useState<ConnectionSummary[] | null>(null);
+  const [metaError, setMetaError] = useState<string | null>(null);
+
+  const [connectionId, setConnectionId] = useState<string>(initialConnection ?? "");
+  const [showConnModal, setShowConnModal] = useState(false);
+  // Once a connection is chosen it renders as a static label; "Change" flips
+  // back to the dropdown. No connection selected yet also forces the dropdown.
+  const [changingConn, setChangingConn] = useState(false);
+
+  // Load auth methods and existing connections for the app in parallel — no
+  // actions fetch here: this component stops at "a connection is chosen", it
+  // never lists or picks an Action.
+  useEffect(() => {
+    let canceled = false;
+    setMetaError(null);
+    Promise.all([api.getAppAuth(appId), api.listConnectionsForApp(appId)])
+      .then(([au, co]) => {
+        if (canceled) return;
+        setAuths(au);
+        setConns(co);
+        // P2: in the auto-satisfied state, never auto-select an existing
+        // connection — see AppStepConfig's own fetch effect for why.
+        const autoSat = (au ?? []).some((a) => a.autoSatisfied === true);
+        if (!autoSat && co.length > 0) setConnectionId(co[0].id);
+      })
+      .catch((e) => !canceled && setMetaError((e as Error).message));
+    return () => {
+      canceled = true;
+    };
+  }, [api, appId]);
+
+  const refetchConns = async () => {
+    const co = await api.listConnectionsForApp(appId);
+    setConns(co);
+    if (co.length > 0) setConnectionId((prev) => prev || co[0].id);
+  };
+
+  const availableAuths = (auths ?? []).filter((a) => a.available !== false);
+  const autoSatisfied = availableAuths.some(
+    (a) => a.autoSatisfied === true && (a.type === "tenantAuth" || a.type === "jit"),
+  );
+  const needsConnection = availableAuths.length > 0 && !autoSatisfied;
+  const hasConnection = (conns ?? []).length > 0;
+  const connectionSatisfied = !needsConnection || (hasConnection && !!connectionId);
+
+  const selectedConn = (conns ?? []).find((c) => c.id === connectionId);
+  // Show the dropdown only before a connection is picked or while changing it;
+  // otherwise the selected connection reads as a compact label.
+  const showConnPicker = changingConn || !connectionId;
+
+  return (
+    <div className="w6w-stepconfig">
+      <div className="w6w-stepconfig-body">
+        <div className="w6w-stack">
+          {metaError && <div className="w6w-result w6w-error">{metaError}</div>}
+          {auths === null && !metaError && <p className="w6w-muted w6w-small">Loading…</p>}
+
+          {/* App — click Change to go back to the app picker. */}
+          <div className="w6w-field">
+            <span>App</span>
+            <div className="w6w-conn-label">
+              {app && (
+                <AppIcon
+                  src={app.iconSvg}
+                  srcDark={app.iconSvgDark}
+                  brandColor={app.brandColor}
+                  name={app.displayName}
+                  theme={theme}
+                  size={20}
+                />
+              )}
+              <span className="w6w-conn-label-name">{app?.displayName ?? appId}</span>
+              {onChangeApp && (
+                <button
+                  type="button"
+                  className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                  onClick={onChangeApp}
+                >
+                  Change
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Connection — the third, auto-satisfied state (P3): the section
+              still renders (it never disappears — a user may still want to
+              add their own third-party account), but the picker is replaced
+              by a passive line plus the escape hatch. */}
+          {auths !== null && autoSatisfied && (
+            <div className="w6w-field">
+              <span>Connection</span>
+              <div className="w6w-conn-label">
+                <span className="w6w-conn-label-name">
+                  Connected automatically — this app needs no connection for your organization.
+                </span>
+                <button
+                  type="button"
+                  className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                  onClick={() => setShowConnModal(true)}
+                >
+                  Create connection
+                </button>
+              </div>
+              <span className="w6w-hint">
+                A scheduled or queued run of this workflow still needs a connection configured on
+                this step — use "Create connection" if this step will run on a schedule.
+              </span>
+            </div>
+          )}
+
+          {/* Connection — the two pre-existing states (needs one / has one). */}
+          {auths !== null &&
+            needsConnection &&
+            (!hasConnection ? (
+              <div className="w6w-result w6w-stepconfig-conn-empty">
+                <div style={{ marginBottom: 8 }}>
+                  This app needs a connection before its actions can run.
+                </div>
+                <button type="button" className="w6w-btn" onClick={() => setShowConnModal(true)}>
+                  Create connection
+                </button>
+              </div>
+            ) : showConnPicker ? (
+              <label className="w6w-field">
+                <span>Connection</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select
+                    value={connectionId}
+                    onChange={(e) => {
+                      setConnectionId(e.target.value);
+                      setChangingConn(false);
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    {(conns ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.displayName || c.id} {c.state ? `(${c.state})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="w6w-btn w6w-btn-ghost"
+                    onClick={() => setShowConnModal(true)}
+                  >
+                    + New
+                  </button>
+                </div>
+              </label>
+            ) : (
+              <div className="w6w-field">
+                <span>Connection</span>
+                <div className="w6w-conn-label">
+                  <span className="w6w-conn-label-name">
+                    {selectedConn?.displayName || selectedConn?.id || connectionId}
+                    {selectedConn?.state ? ` (${selectedConn.state})` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                    onClick={() => setChangingConn(true)}
+                  >
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                    onClick={() => setShowConnModal(true)}
+                  >
+                    + New
+                  </button>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Footer — pinned to the modal bottom. One button: it commits the
+          chosen connection and hands control back to the caller. Gated on
+          connectionSatisfied alone — there is no Action here, so the
+          `!!actionKey` clause of AppStepConfig's setupComplete does not
+          exist. Fires onConnected on click only, never on a state change
+          (D-sbm-2). */}
+      <div className="w6w-modal-actions w6w-stepconfig-footer">
+        <button type="button" className="w6w-btn w6w-btn-ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="w6w-btn"
+          disabled={!connectionSatisfied || !app}
+          onClick={() => app && onConnected(connectionId, app)}
+        >
+          Next →
+        </button>
       </div>
 
       {showConnModal && (
