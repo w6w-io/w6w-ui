@@ -203,6 +203,15 @@ export const CALL_APP = "@w6w/call";
  * host-side, so there is no `project` param (C-6).
  */
 export const DOCUMENT_APP = "@w6w/document";
+/**
+ * Compile a Handlebars `template` string against a resolved `values` object
+ * (core rfcs/node-types.md · F-3 amendment, "the `@w6w/template` host node").
+ * Host node: `runInternalNode` short-circuits this id before the registry
+ * loads a module — it needs no privileged host resource (no DB, no
+ * tenant/project scope), and runs host-side only because the template
+ * compiles to a JS function, the same risk shape `@w6w/script` has.
+ */
+export const TEMPLATE_APP = "@w6w/template";
 
 /** True when `app` is a reserved internal pseudo-app id (`@w6w/*`). */
 export function isInternalApp(app: string): boolean {
@@ -327,6 +336,9 @@ const ICON_CALL =
 /** Dog-eared page with lines — a stored JSON document. */
 const ICON_DOCUMENT =
   '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />';
+/** Braces — a compiled placeholder template. */
+const ICON_TEMPLATE =
+  '<path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1" /><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1" />';
 
 /** The built-in internal nodes, in palette order. */
 export const INTERNAL_NODES: InternalNodeDef[] = [
@@ -626,6 +638,39 @@ export const INTERNAL_NODES: InternalNodeDef[] = [
         required: true,
         default: "// Runs as a function body. Return the step's output.\nreturn input;",
         hint: "JavaScript function body; return the step's output.",
+      },
+    ],
+  },
+  {
+    app: TEMPLATE_APP,
+    action: "render",
+    label: "Render template",
+    displayName: "Template",
+    group: "compute",
+    icon: ICON_TEMPLATE,
+    params: [
+      {
+        key: "template",
+        label: "Template",
+        type: "text",
+        required: true,
+        hint:
+          "Handlebars template. Placeholder names are workflow-agnostic — bind them below. " +
+          "{{name}} is HTML-escaped; use {{{name}}} for raw output.",
+      },
+      {
+        // The manifest declares `values` as `type: "json"` — `"vars"` is a
+        // UI-only type, not a member of core's canonical `ParamType`, exactly
+        // the same divergence `data/index.ts:10-13` explains for `@w6w/data`'s
+        // own `vars` param. `required` surfaces the table in the form directly.
+        key: "values",
+        label: "Values",
+        type: "vars",
+        required: true,
+        default: [],
+        hint:
+          'A typed key/value array: [{ "key": "data", "type": "json", "value": ... }]. ' +
+          "Each key becomes a top-level placeholder root.",
       },
     ],
   },
