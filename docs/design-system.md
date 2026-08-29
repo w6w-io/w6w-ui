@@ -1,3 +1,8 @@
+---
+title: "The spacing / typography scale"
+section: "guides"
+---
+
 # The spacing / typography scale
 
 `@w6w/ui` ships a spacing and typography scale as CSS custom properties, under

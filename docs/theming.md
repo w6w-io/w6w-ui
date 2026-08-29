@@ -1,3 +1,8 @@
+---
+title: "Light/dark mode — the embedding contract"
+section: "guides"
+---
+
 # Light/dark mode — the embedding contract
 
 Color tokens (`--w6w-panel`, `--w6w-accent`, etc.) are covered in the
