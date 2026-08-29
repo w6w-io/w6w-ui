@@ -61,6 +61,23 @@ test("renderResult: secret parts render masked, regardless of samples", () => {
   assert.equal(renderResult([{ kind: "secret", ref: "jwt_key" }], {}), "•••");
 });
 
+test("renderResult: a render part resolves through the SAME flat samples lookup as var — raw text, no {{ }} re-substitution (M6, A4c)", () => {
+  // The sample's own value is itself a template string with a `{{ }}` marker
+  // — proving renderResult does NOT try to substitute inside it (there is no
+  // run scope at design time to substitute against; that is the engine's
+  // `resolveRenderPart`, out of scope here).
+  assert.equal(
+    renderResult([{ kind: "render", ref: "documents.welcome.body" }], {
+      "documents.welcome.body": "Hi {{ customer_name }}",
+    }),
+    "Hi {{ customer_name }}",
+  );
+});
+
+test("renderResult: a render part absent from samples renders empty string, same as var", () => {
+  assert.equal(renderResult([{ kind: "render", ref: "documents.a.body" }], {}), "");
+});
+
 test("renderResult: expr parts fall back to their {{ }} template form", () => {
   assert.equal(
     renderResult([{ kind: "expr", expr: { var: "vars.n" } }], {}),

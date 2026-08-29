@@ -129,7 +129,7 @@ test("A2 — the + Add control renders iff the matching host callback is supplie
       vars: ["a"],
       secrets: ["s"],
       inputs: ["in1"],
-      documents: ["doc1"],
+      documents: [{ key: "doc1" }],
       steps: [{ id: "st1" }],
       createVar: async () => {},
       createSecret: async () => {},
