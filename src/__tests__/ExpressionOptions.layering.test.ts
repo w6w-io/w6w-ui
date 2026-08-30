@@ -84,7 +84,7 @@ function probe(onScope: (o: ExpressionOptions) => void): React.ReactElement {
 const APP: ExpressionOptions = {
   vars: ["from_email"],
   secrets: ["sendgrid_key"],
-  documents: ["welcome"],
+  documents: [{ key: "welcome" }],
   sampleValues: { "vars.from_email": "a@b.c" },
 };
 
@@ -103,7 +103,7 @@ test("a page's contribution layers ON TOP of the app shell's, without restating 
   assert.deepEqual(seen?.inputs, ["to", "message"], "the page's own key is in scope");
   assert.deepEqual(seen?.vars, ["from_email"], "the shell's vars survive the page provider");
   assert.deepEqual(seen?.secrets, ["sendgrid_key"]);
-  assert.deepEqual(seen?.documents, ["welcome"]);
+  assert.deepEqual(seen?.documents, [{ key: "welcome" }]);
   assert.deepEqual(
     seen?.sampleValues,
     { "vars.from_email": "a@b.c" },

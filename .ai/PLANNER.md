@@ -11,7 +11,7 @@
 Almost every change lands in `src/`, which splits three ways: **14** top-level `.tsx` files (large,
 often multi-export modules — e.g. `AppPicker.tsx`, and `StepBuilderModal.tsx`, which bundles
 `NodeList`, `CallableList`, `CallableRow` and `ReadyToUseFlow` as sibling functions in one file; see
-fact 1), **21** smaller components under `src/components/`, and **28** SCSS partials under
+fact 1), **22** smaller components under `src/components/`, and **28** SCSS partials under
 `src/styles/` that compile into the two committed `.css` bundles (fact 2). `scripts/` holds two
 small Node-only build/lint tools, each documented by its own header docstring — read the docstring
 before the script body (`scripts/build-css.mjs:1-21`, `scripts/lint-tokens.mjs:1-29`). `test/` holds
@@ -62,10 +62,11 @@ small and authoritative for two specific surfaces — see the routing table belo
    ```
    "test": "node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts"
    ```
-   Both roots are real and both matter: `src/__tests__/*.test.ts` (**24** files as of `main` @
-   `f846edc` — up from 23 at `895e25d` via `StepBuilderModal.autoconnect.test.ts`, added by an
-   unrelated merged project, `feat(stepbuilder): third connection state`) and
-   `src/components/__tests__/*.test.ts` (9 files, unchanged: `Copyable`, `CopyableText`,
+   Both roots are real and both matter: `src/__tests__/*.test.ts` (**26** files, measured on
+   `proj/26-08-29-02-workflow-issues-T1.1.1` — up from 24 at `f846edc` via `StepBuilderModal.connection-only.test.ts`
+   (25, this branch's own fork point `main` @ `6a145c3`, an unrelated merged project,
+   `26-08-29-00-repository-tab`) then this project's own new `ExpressionEditorModal.documents.test.ts`
+   (26)) and `src/components/__tests__/*.test.ts` (9 files, unchanged: `Copyable`, `CopyableText`,
    `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`, `UptimeStrip`, `expression-dom`,
    `expression-template`).
    The trap survives the fix that added the second root: a `.test.ts` file placed in a **third**
@@ -108,9 +109,9 @@ framing (its TRAP 2 section).
 | gate | command | result |
 |---|---|---|
 | token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** |
-| lint | `./node_modules/.bin/biome check .` | `Checked 93 files in 33ms. No fixes applied.` — 0 errors (was 92 files at `895e25d`; +1 from `StepBuilderModal.autoconnect.test.ts`, an unrelated merged project) |
+| lint | `./node_modules/.bin/biome check .` | `Checked 95 files in 33ms. No fixes applied.` — 0 errors, measured on `proj/26-08-29-02-workflow-issues-T1.1.1` (was 93 files at `f846edc`; 94 at this branch's fork point `main` @ `6a145c3` via `StepBuilderModal.connection-only.test.ts`, an unrelated merged project; +1 from this project's own `ExpressionEditorModal.documents.test.ts`) |
 | typecheck | `./node_modules/.bin/tsc -b --noEmit` | exit 0, no output |
-| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **340 pass, 0 fail** (TAP: `tests 340 · pass 340 · fail 0`) on `main` @ `f846edc`, post-merge of `26-08-07-01-ui-dblclick-test-receiver-pin` (was **335** at `895e25d` — that number is history, not current; re-run rather than cite it). This project added 0 new tests (it added assertions inside an existing test, `WorkflowFlowEditor.dblclick-wiring.test.ts`'s add/remove-pair case) — the +5 vs `895e25d` is entirely `StepBuilderModal.autoconnect.test.ts`, an unrelated merged project. |
+| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **356 pass, 0 fail** (TAP: `tests 356 · pass 356 · fail 0`), measured on `proj/26-08-29-02-workflow-issues-T1.1.1` (was **348** at this branch's fork point `main` @ `6a145c3` — itself up from `340` at `f846edc` via `StepBuilderModal.connection-only.test.ts`'s own new tests, an unrelated merged project). This project added the remaining **8**: 6 in the new `ExpressionEditorModal.documents.test.ts` and 2 new `renderResult` cases in `expression-template.test.ts`. |
 | `check:css` | `node scripts/build-css.mjs --check` | both `src/styles.css` and `src/code.css` up to date |
 | picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **GREEN 22/22** (matching `EXPECTED_TESTS` in fact 4 above), confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates — not re-run again at closeout since the merge introduced no further picker-layout-touching change beyond what T1.1.3 already gated |
 | copyable (Docker/Chromium) | `bash test/copyable/run.sh` | **GREEN 9/9**, confirmed by the same T1.1.3 gates (`.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md`) — not re-run again at closeout for the same reason |
@@ -177,6 +178,22 @@ is **not** this project's own: it is entirely `StepBuilderModal.autoconnect.test
 different, unrelated project (`feat(stepbuilder): third connection state`) that merged to `main`
 between this file's two verifications. `335`/`92`/`23` are now history.
 
+**T1.1.1 of `26-08-29-02-workflow-issues`** (measured on its own task branch,
+`proj/26-08-29-02-workflow-issues-T1.1.1`, forked from `main` @ `6a145c3` — not yet merged, so no
+post-merge sha to cite here) widened `ExpressionOptions.documents` from `string[]` to
+`ExpressionDocumentSource[]` (a document's top-level JSON fields, gated on `doc.format === "json"`
+and a successful plain-object parse, mirroring `run-seed.ts`'s `documentsSeed`), added the matching
+nested `w6w-exprmodal-subsources` rendering plus a second, visible "insert as render" action on each
+field row (`data-testid="expr-insert-render"`), and extended `renderResult`/`usedRefs` to treat a
+`render` part's ref the same way a `var` part's is treated for the design-time preview. It added one
+new file (`ExpressionEditorModal.documents.test.ts`, 6 tests) and 2 new `renderResult` cases in the
+existing `expression-template.test.ts`, bumping the unit suite from this branch's fork-point baseline
+of `348` to `356` and the biome file count from `94` to `95` (fact 3's `src/__tests__` count moves
+from `25` to `26` accordingly). `_expression-modal.scss` gained the new render-button styling entirely
+in `--w6w-*` tokens (font-size, gap) plus box-geometry properties the ratchet does not scan
+(width/height/border/border-radius, per this file's own *Gate baselines* note above) — the
+`lint:tokens` whole-package total stays unchanged at `59 violations in 18 files (baseline: 59)`.
+
 **Also worth knowing for future work here**: this project found a harness-tooling gap, not a
 `packages/ui` code gap — `workspace-up.sh`'s sibling-closure detection (in
 `.orchestration/projects/_templates/tools/`) only reads `../`-pattern deps in `package.json`/
@@ -186,3 +203,13 @@ between this file's two verifications. `335`/`92`/`23` are now history.
 errors) that has nothing to do with whatever the task actually changed. Not a `packages/ui` defect —
 recorded here because the next planner scoping a `ui`-only harness project needs to know to check
 for `.worktrees/<project-id>/core` before trusting a red gate in that lane.
+
+**T1.1.1 round 2** (same branch, same fork point) corrected a pre-existing drift the round-1 pass
+didn't touch: *Where work happens* read `21` smaller components under `src/components/`, already
+wrong at this file's own `verified:` commit (`f846edc`) — `22` there and `22` at this branch's own
+HEAD (`find src/components -maxdepth 1 -type f ! -name '*.stories.tsx' | wc -l`, excluding the
+`__tests__` subdirectory `git ls-tree` also lists). Corrected to `22`. It also rewrote the stale
+`ExpressionEditorModal.tsx:106-107` comment claiming a render part can only ever be authored by
+toggling an existing `var` chip — round 1's own D-P1 feature (the insert-as-render action) inserts
+one directly, so the comment now describes both authoring paths. No behavior change; no gate figure
+moved.

@@ -72,6 +72,39 @@ export interface ExpressionStepSource {
   outputs?: { key: string; label?: string }[];
 }
 
+/**
+ * A document contributing pickable refs (`documents.<key>`, and one
+ * `documents.<key>.<field>` per top-level field when it qualifies).
+ *
+ * A document contributes field sub-entries **iff**: `doc.format === "json"`
+ * AND `JSON.parse(doc.content)` succeeds into a plain object — where *plain
+ * object* means `typeof v === "object" && v !== null && !Array.isArray(v)`.
+ * This mirrors the engine's own gate bit-for-bit: `documentsSeed`
+ * (`packages/server/packages/api/run-seed.ts`, read-only, out of scope) is the
+ * authority — `format === "json"`, then a `try/catch JSON.parse`, falling
+ * back to the raw content string on either a non-`json` format or a throw.
+ * Every non-`json` format, and a `json` document whose parse throws or yields
+ * a non-plain-object (array/scalar), is excluded — offering a field ref
+ * outside this gate would fail at run time with `render_ref_unresolved`,
+ * because the run scope itself never parsed that document.
+ */
+export interface ExpressionDocumentSource {
+  /** Document key — the key under `documents` in the run scope. */
+  key: string;
+  /**
+   * The document's top-level field keys, when the gate above holds. Each
+   * entry feeds exactly one ref — `documents.<key>.<field>` — with `key`
+   * carried **verbatim**: a display-shortened key would build a ref that
+   * renders fine in the editor and evaluates to empty at run time, with no
+   * error.
+   *
+   * **Omitted** (not `[]`) when the document contributes no fields, so a
+   * consumer can tell "nothing declared" from "declared none" without a
+   * special case — mirrors {@link ExpressionStepSource.outputs}'s own rule.
+   */
+  fields?: { key: string }[];
+}
+
 /** Known variable/secret names offered in an ExpressionInput's insert menu. */
 export interface ExpressionOptions {
   vars?: string[];
@@ -83,11 +116,12 @@ export interface ExpressionOptions {
    */
   inputs?: string[];
   /**
-   * Document names in scope (`documents.<name>`). A store-independent affordance:
-   * whatever names the host passes are offered as insertable chips. Omitted when
-   * no documents are available.
+   * Documents in scope (`documents.<key>`, plus `documents.<key>.<field>` for
+   * each document that qualifies — see {@link ExpressionDocumentSource}). A
+   * store-independent affordance: whatever the host passes is offered as
+   * insertable chips. Omitted when no documents are available.
    */
-  documents?: string[];
+  documents?: ExpressionDocumentSource[];
   /**
    * The workflow state leading to this step: upstream steps whose output is in
    * scope (`steps.<id>.output`). Present only in a workflow context; omitted for

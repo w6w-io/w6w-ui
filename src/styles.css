@@ -683,6 +683,43 @@
   border-left: 1px solid var(--w6w-border);
 }
 
+/* One document-field row: the primary insert source (flex: 1, so it still
+   truncates a long key the same way a bare `.w6w-exprmodal-source` does) plus
+   the second, visible action (D-P1) that inserts the SAME ref as a `render`
+   part — so the two read as one entry, not two unrelated controls. */
+.w6w-exprmodal-subsource-row {
+  display: flex;
+  align-items: center;
+  gap: var(--w6w-sp-1);
+}
+
+.w6w-exprmodal-subsource-row .w6w-exprmodal-source {
+  flex: 1;
+  min-width: 0;
+}
+
+.w6w-exprmodal-render-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--w6w-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--w6w-success);
+  opacity: 0.75;
+  font-size: var(--w6w-fs-xs);
+  cursor: pointer;
+}
+
+.w6w-exprmodal-render-btn:hover {
+  opacity: 1;
+  background: var(--w6w-panel);
+  border-color: var(--w6w-success);
+}
+
 .w6w-exprmodal-main {
   min-width: 0;
   min-height: 0;

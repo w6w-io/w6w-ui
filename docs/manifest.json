@@ -1,0 +1,16 @@
+{
+  "docs": [
+    {
+      "path": "design-system.md",
+      "slug": "design-system",
+      "section": "guides",
+      "title": "The spacing / typography scale"
+    },
+    {
+      "path": "theming.md",
+      "slug": "theming",
+      "section": "guides",
+      "title": "Light/dark mode — the embedding contract"
+    }
+  ]
+}
