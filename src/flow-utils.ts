@@ -11,6 +11,7 @@ import {
   type FlowWorkflow,
   edgeVisuals,
   isInternalApp,
+  sourceHandleForLane,
 } from "./flow-types.ts";
 
 export interface StepNodeData extends Record<string, unknown> {
@@ -309,11 +310,18 @@ export function workflowToFlow(wf: FlowWorkflow): { nodes: StepNode[]; edges: Ed
     // an error edge between the same pair: two edges sharing one id would be
     // collapsed by React Flow's id-keyed store and one lane silently lost. The
     // qualifier comes from {@link flowEdgeId}, which every other id site calls.
+    //
+    // `sourceHandle` is stamped from {@link sourceHandleForLane} (T1.1.1) so a
+    // workflow saved before the error port existed renders its error edges from
+    // the new port on next open, not only edges drawn live after the feature
+    // shipped. `sourceHandle` is presentation only — `flowToWorkflow` never
+    // reads it back, so this does not touch the persisted `Edge.when` round-trip.
     const when = e.when ?? "success";
     return {
       id: flowEdgeId(e.from, e.to, when),
       source: e.from,
       target: e.to,
+      sourceHandle: sourceHandleForLane(when),
       animated: false,
       data: { when },
       ...edgeVisuals(when),

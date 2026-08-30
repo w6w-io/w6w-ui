@@ -14,7 +14,7 @@
  * from `index.ts` / `flow.ts`.
  */
 import { type Edge, addEdge } from "@xyflow/react";
-import { edgeVisuals, nodePortsForStep } from "./flow-types.ts";
+import { edgeVisuals, nodePortsForStep, sourceHandleForLane } from "./flow-types.ts";
 import { type StepNode, flowEdgeId } from "./flow-utils.ts";
 
 /**
@@ -131,10 +131,15 @@ function planConnect(
   // caller says otherwise, and flowToWorkflow reads `data.when` back off the edge
   // (it would see `undefined` otherwise). "success" is emitted as ABSENT on the
   // way out. The id comes from `flowEdgeId`, so an error edge is qualified and
-  // cannot collide with its success sibling.
+  // cannot collide with its success sibling. `sourceHandle` is stamped by
+  // EXPLICIT assignment (T1.1.1) so the anchor follows the lane the same way
+  // `id`/`data` do.
   const id = flowEdgeId(source, target, when);
   return {
-    next: addEdge({ source, target, id, data: { when } }, next),
+    next: addEdge(
+      { source, target, id, sourceHandle: sourceHandleForLane(when), data: { when } },
+      next,
+    ),
     conflict: collidingEdgeId(next, id),
   };
 }
@@ -260,9 +265,12 @@ function planRelane(
   );
   // The lane rides on `data.when`, the visuals come from the shared
   // `edgeVisuals`, and the id is re-minted because it ENCODES the lane
-  // (`flowEdgeId`). `className`/`label` are assigned rather than spread: for
-  // "success" `edgeVisuals` returns `{}`, and spreading that would leave a stale
-  // error class on an edge being moved back to the success lane.
+  // (`flowEdgeId`). `className`/`label`/`sourceHandle` are assigned rather than
+  // spread: for "success" `edgeVisuals` returns `{}` and `sourceHandleForLane`
+  // returns `undefined`, and spreading `...me` over either would leave a stale
+  // error class / a stale error-port anchor on an edge being moved back to the
+  // success lane (T1.1.1 — `sourceHandle` has exactly the same hazard as
+  // `className`).
   const visuals = edgeVisuals(when);
   const relaned: Edge = {
     ...me,
@@ -270,6 +278,7 @@ function planRelane(
     data: { ...me.data, when },
     className: visuals.className,
     label: visuals.label,
+    sourceHandle: sourceHandleForLane(when),
   };
   // The same id-uniqueness test the creation path runs, against the survivors only.
   const conflict = collidingEdgeId(

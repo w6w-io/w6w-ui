@@ -99,6 +99,38 @@ export function edgeVisuals(when: "success" | "error" | undefined): {
   return when === "error" ? { className: "w6w-edge-error", label: "on error" } : {};
 }
 
+/**
+ * The React Flow handle id a step/control node's **error exit port** carries
+ * (T1.1.1). Internal to `@w6w/ui` — not re-exported from `flow.ts` / `index.ts`
+ * (D-P2), since no consumer outside this package needs it.
+ */
+export const ERROR_SOURCE_HANDLE = "out-error";
+
+/**
+ * The `sourceHandle` a minted/re-laned/loaded edge carries for a given lane —
+ * the inverse of {@link laneForSourceHandle}. `undefined` for `"success"`/
+ * absent is **load-bearing, not stylistic**: React Flow anchors a handle-less
+ * edge to the node's sole *unnamed* handle, which is the exit every
+ * already-saved workflow's edges implicitly use. An empty string would not do
+ * this — an empty string is a real, if degenerate, handle id.
+ */
+export function sourceHandleForLane(when: "success" | "error" | undefined): string | undefined {
+  return when === "error" ? ERROR_SOURCE_HANDLE : undefined;
+}
+
+/**
+ * The lane a drag started from, read off the handle id React Flow reports.
+ * **The one canonicalisation point** every minting/re-laning site calls
+ * (`onConnect`, `onConnectEnd`) so the handle-id spelling is decided once and
+ * both drag gestures provably agree — two inline comparisons is the shape
+ * where one gesture silently drifts. Exactly {@link ERROR_SOURCE_HANDLE} is
+ * `"error"`; everything else — a near-miss id, `null`, `undefined` — is
+ * `"success"`.
+ */
+export function laneForSourceHandle(handleId: string | null | undefined): "success" | "error" {
+  return handleId === ERROR_SOURCE_HANDLE ? "error" : "success";
+}
+
 export interface FlowWorkflow {
   manifestVersion: string;
   id: string;

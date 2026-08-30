@@ -47,6 +47,24 @@
   fill: var(--w6w-panel);
 }
 
+/* The error exit port — a step/control node's second SOURCE handle (T1.1.1),
+   rendered below the ordinary exit via the shared PortHandle component
+   (`id={ERROR_SOURCE_HANDLE}`, `variant="error"`). Danger-tinted, same
+   --w6w-danger token as .w6w-edge-error above (never a hard-coded hex), and
+   deliberately SMALLER + dimmer than the default handle dot so the ordinary
+   exit still reads as the primary way out of a step — this is the door for
+   the failure path, not an equal alternative. */
+.w6w-flow .react-flow__handle.w6w-handle-error {
+  width: 6px;
+  height: 6px;
+  background: var(--w6w-danger);
+  border-color: var(--w6w-danger);
+  opacity: 0.8;
+}
+.w6w-flow .react-flow__handle.w6w-handle-error:hover {
+  opacity: 1;
+}
+
 /* Workflow edges: highlight the selected/focused edge in the accent colour and
    thicken it, so it's obvious which one Backspace/Delete will remove. The wide,
    invisible interaction path keeps the click target generous. */
