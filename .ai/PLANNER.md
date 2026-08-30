@@ -62,13 +62,15 @@ small and authoritative for two specific surfaces — see the routing table belo
    ```
    "test": "node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts"
    ```
-   Both roots are real and both matter: `src/__tests__/*.test.ts` (**26** files, measured on
-   `proj/26-08-29-02-workflow-issues-T1.1.1` — up from 24 at `f846edc` via `StepBuilderModal.connection-only.test.ts`
-   (25, this branch's own fork point `main` @ `6a145c3`, an unrelated merged project,
-   `26-08-29-00-repository-tab`) then this project's own new `ExpressionEditorModal.documents.test.ts`
-   (26)) and `src/components/__tests__/*.test.ts` (9 files, unchanged: `Copyable`, `CopyableText`,
-   `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`, `UptimeStrip`, `expression-dom`,
-   `expression-template`).
+   Both roots are real and both matter: `src/__tests__/*.test.ts` (**29** files, measured on
+   `proj/26-08-30-00-fixes-T1.1.2` — this doc's `26` had already drifted to **27** by `f76edc7`
+   (this project's own base, `git ls-tree -r --name-only f76edc7 -- src/__tests__ | grep
+   '\.test\.ts$' | wc -l`, re-verified independently rather than copied from the contract), then
+   this project's own T1.1.1 added `WorkflowFlowEditor.error-port-wiring.test.ts` (28), then T1.1.2
+   added `StepEditModal.setup-and-configure.test.ts` (29) — see the *Gate baselines* section's
+   closing paragraph) and `src/components/__tests__/*.test.ts` (9 files, unchanged: `Copyable`,
+   `CopyableText`, `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`, `UptimeStrip`,
+   `expression-dom`, `expression-template`).
    The trap survives the fix that added the second root: a `.test.ts` file placed in a **third**
    location, or named `.test.tsx`, silently never runs — the loader (`src/test-jsx-loader.mjs:16-20`)
    transpiles `.tsx` on import, but the `--test` arguments above are `.test.ts` globs only, so a
@@ -109,9 +111,9 @@ framing (its TRAP 2 section).
 | gate | command | result |
 |---|---|---|
 | token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** |
-| lint | `./node_modules/.bin/biome check .` | `Checked 95 files in 33ms. No fixes applied.` — 0 errors, measured on `proj/26-08-29-02-workflow-issues-T1.1.1` (was 93 files at `f846edc`; 94 at this branch's fork point `main` @ `6a145c3` via `StepBuilderModal.connection-only.test.ts`, an unrelated merged project; +1 from this project's own `ExpressionEditorModal.documents.test.ts`) |
+| lint | `./node_modules/.bin/biome check .` | `Checked 98 files in ~30ms. No fixes applied.` — 0 errors, measured on `proj/26-08-30-00-fixes-T1.1.2` (this doc's stale `95` had already drifted to **96** at `f76edc7`, this project's own base — independently re-verified via `git archive f76edc7` into a scratch checkout, not copied from the contract; T1.1.1 added `WorkflowFlowEditor.error-port-wiring.test.ts` → 97; T1.1.2 added `StepEditModal.setup-and-configure.test.ts` → 98) |
 | typecheck | `./node_modules/.bin/tsc -b --noEmit` | exit 0, no output |
-| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **356 pass, 0 fail** (TAP: `tests 356 · pass 356 · fail 0`), measured on `proj/26-08-29-02-workflow-issues-T1.1.1` (was **348** at this branch's fork point `main` @ `6a145c3` — itself up from `340` at `f846edc` via `StepBuilderModal.connection-only.test.ts`'s own new tests, an unrelated merged project). This project added the remaining **8**: 6 in the new `ExpressionEditorModal.documents.test.ts` and 2 new `renderResult` cases in `expression-template.test.ts`. |
+| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **380 pass, 0 fail** (TAP: `tests 380 · pass 380 · fail 0`), measured on `proj/26-08-30-00-fixes-T1.1.2` (this doc's stale `356` had already drifted to **359** at `f76edc7`, re-verified the same way as the biome count above; T1.1.1 added 11, landing at **370**; T1.1.2 added the remaining **10**, all in the new `StepEditModal.setup-and-configure.test.ts`) |
 | `check:css` | `node scripts/build-css.mjs --check` | both `src/styles.css` and `src/code.css` up to date |
 | picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **GREEN 22/22** (matching `EXPECTED_TESTS` in fact 4 above), confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates — not re-run again at closeout since the merge introduced no further picker-layout-touching change beyond what T1.1.3 already gated |
 | copyable (Docker/Chromium) | `bash test/copyable/run.sh` | **GREEN 9/9**, confirmed by the same T1.1.3 gates (`.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md`) — not re-run again at closeout for the same reason |
@@ -194,16 +196,6 @@ in `--w6w-*` tokens (font-size, gap) plus box-geometry properties the ratchet do
 (width/height/border/border-radius, per this file's own *Gate baselines* note above) — the
 `lint:tokens` whole-package total stays unchanged at `59 violations in 18 files (baseline: 59)`.
 
-**Also worth knowing for future work here**: this project found a harness-tooling gap, not a
-`packages/ui` code gap — `workspace-up.sh`'s sibling-closure detection (in
-`.orchestration/projects/_templates/tools/`) only reads `../`-pattern deps in `package.json`/
-`deno.json`, and misses `packages/ui/pnpm-workspace.yaml`'s `overrides: '@w6w/expr':
-'link:../core/packages/expr'` — so a harness workspace built with `repos: [ui]` silently gets no
-`core` sibling symlink, and every gate in that lane reads a large false-red (227/216/11 tests, 5 tsc
-errors) that has nothing to do with whatever the task actually changed. Not a `packages/ui` defect —
-recorded here because the next planner scoping a `ui`-only harness project needs to know to check
-for `.worktrees/<project-id>/core` before trusting a red gate in that lane.
-
 **T1.1.1 round 2** (same branch, same fork point) corrected a pre-existing drift the round-1 pass
 didn't touch: *Where work happens* read `21` smaller components under `src/components/`, already
 wrong at this file's own `verified:` commit (`f846edc`) — `22` there and `22` at this branch's own
@@ -213,3 +205,23 @@ HEAD (`find src/components -maxdepth 1 -type f ! -name '*.stories.tsx' | wc -l`,
 toggling an existing `var` chip — round 1's own D-P1 feature (the insert-as-render action) inserts
 one directly, so the comment now describes both authoring paths. No behavior change; no gate figure
 moved.
+
+**`26-08-30-00-fixes`'s T1.1.1 and T1.1.2** (measured on `proj/26-08-30-00-fixes-T1.1.2`, forked
+from `proj/26-08-30-00-fixes` at the merged T1.1.1 tip — not yet merged to `main`, so no post-merge
+sha to cite here) found this doc's *Gate baselines* table and fact 3 had already drifted **before**
+either task started: this project's own base, `f76edc7`, independently re-measured (`git archive
+f76edc7` into a scratch checkout, both gates re-run there) rather than trusted from the contract,
+was already `359` pass / `96` biome files / `27` `src/__tests__` files — not the `356`/`95`/`26`
+this doc had recorded. T1.1.1 (the error-port edge lane derivation + `LANE_HINT` rewording) added
+one new file, `WorkflowFlowEditor.error-port-wiring.test.ts`, plus cases in the existing
+`flow-connect.test.ts`/`flow-utils.test.ts`, landing at `370` pass / `97` biome files / `28`
+`src/__tests__` files. T1.1.2 (the step edit modal: one combined App+Connection field, the ports
+checkbox hidden behind `SHOW_STEP_PORTS`, and on-error copy reworded to state retry-first/
+continue-proceeds/error-edge-overrides per `rfcs/workflow.md`'s Amendment) added one new file,
+`StepEditModal.setup-and-configure.test.ts` (10 tests), landing at the **`380`/`98`/`29`** this
+doc's *Gate baselines* table and fact 3 now record. It also deleted this doc's stale claim that
+`workspace-up.sh` misses `pnpm-workspace.yaml` in its sibling-closure `find` — re-checked directly
+against `.orchestration/projects/_templates/tools/workspace-up.sh:70`, which already lists
+`pnpm-workspace.yaml` alongside `deno.json`/`package.json`; this lane's own `core` sibling symlink
+resolved correctly (`readlink -f node_modules/@w6w/expr` → a real path), so the claim no longer
+reproduced and was removed rather than annotated, per this file's own Maintenance rule.
