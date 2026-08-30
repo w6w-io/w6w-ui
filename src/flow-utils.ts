@@ -550,6 +550,52 @@ function implicitChain(steps: FlowStep[]): FlowEdge[] {
   return out;
 }
 
+/**
+ * Turn a human-readable label (an action's `label`/`displayName`) into an
+ * id-safe slug for {@link suggestStepId}'s `prefix` — human override,
+ * 2026-08-30: a step id derived from its OWN action ("data_1",
+ * "render_template_1", "manual_trigger_1") orients a reader who never
+ * renamed it, unlike the generic "gate_1"/"step_1" every internal/external
+ * step used to get regardless of what it actually does. Lowercase,
+ * underscore-separated, ASCII word characters only; falls back to `"step"`
+ * for a label that slugifies to nothing (empty, or entirely punctuation).
+ */
+export function slugifyLabel(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || "step";
+}
+
+/**
+ * The current chain's ROOT: the earliest-added node (array/declaration order)
+ * with no incoming edge. `undefined` for an empty graph. Used to give a
+ * newly-added TRIGGER a sensible default wire — human override, 2026-08-30 —
+ * rather than always landing as a floating node. Array order (not position)
+ * is the tie-break because it is deterministic and matches "the node that
+ * was here first," not wherever the canvas happens to have placed it.
+ */
+export function findChainRoot(nodes: StepNode[], edges: Edge[]): StepNode | undefined {
+  const hasIncoming = new Set(edges.map((e) => e.target));
+  return nodes.find((n) => !hasIncoming.has(n.id));
+}
+
+/**
+ * The current chain's TAIL: the most-recently-added node (array/declaration
+ * order) with no outgoing edge. `undefined` for an empty graph. Used to give
+ * a newly-added non-trigger STEP a sensible default wire — the most recently
+ * placed branch is the one a user adding steps one at a time is most likely
+ * extending.
+ */
+export function findChainTail(nodes: StepNode[], edges: Edge[]): StepNode | undefined {
+  const hasOutgoing = new Set(edges.map((e) => e.source));
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    if (!hasOutgoing.has(nodes[i].id)) return nodes[i];
+  }
+  return undefined;
+}
+
 /** Suggest a unique step id given the current graph. */
 export function suggestStepId(existing: string[], prefix = "step"): string {
   const set = new Set(existing);

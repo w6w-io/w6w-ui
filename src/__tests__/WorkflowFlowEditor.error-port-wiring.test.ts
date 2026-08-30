@@ -148,12 +148,24 @@ test("U7 — onConnectEnd captures the lane on pendingConnect, and addBuiltStep 
 
   const addBuiltStepBody = findCallbackBody(inner, "addBuiltStep");
   const applyConnectCalls = findCalls(addBuiltStepBody, "applyConnect");
-  assert.equal(applyConnectCalls.length, 1, "addBuiltStep must call applyConnect exactly once");
-  assert.equal(applyConnectCalls[0].arguments.length, 5, "applyConnect must receive 5 arguments");
+  // addBuiltStep also auto-wires a spawned step to the current chain
+  // root/tail when it wasn't dragged from an existing connection (chain
+  // auto-wiring, 2026-08-30) — those calls are plain (no explicit lane,
+  // defaulting to "success") and are not this test's concern. Scope to the
+  // ONE call that must carry the captured drag lane: the pendingConnect
+  // branch's own applyConnect(source, target, nextNodes, edges, <lane>).
+  const laneThreadedCalls = applyConnectCalls.filter(
+    (c) => c.arguments.length === 5 && /pendingConnect/.test(c.arguments[4].getText(sf)),
+  );
+  assert.equal(
+    laneThreadedCalls.length,
+    1,
+    "addBuiltStep must call applyConnect with the captured pendingConnect lane exactly once",
+  );
   // A literal `"success"` in this position must fail — the assertion is on
   // the TEXT mentioning `pendingConnect`, not merely on the argument count.
   assert.match(
-    applyConnectCalls[0].arguments[4].getText(sf),
+    laneThreadedCalls[0].arguments[4].getText(sf),
     /pendingConnect/,
     "applyConnect's 5th argument must come from the captured pendingConnect lane",
   );

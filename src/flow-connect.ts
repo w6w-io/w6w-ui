@@ -133,11 +133,24 @@ function planConnect(
   // way out. The id comes from `flowEdgeId`, so an error edge is qualified and
   // cannot collide with its success sibling. `sourceHandle` is stamped by
   // EXPLICIT assignment (T1.1.1) so the anchor follows the lane the same way
-  // `id`/`data` do.
+  // `id`/`data` do. `edgeVisuals(when)` (className/label) is spread here too —
+  // 2026-08-30 fix: a freshly DRAWN error edge previously carried the right
+  // `data.when`/`sourceHandle` (so it persisted and reloaded correctly) but
+  // rendered with no red dash / "on error" label until the next page load,
+  // because only `planRelane` (re-laning an EXISTING edge) applied it — the
+  // create path never did. Same trap `planRelane`'s own comment warns about:
+  // this must be an explicit spread here, not left for a later re-render.
   const id = flowEdgeId(source, target, when);
   return {
     next: addEdge(
-      { source, target, id, sourceHandle: sourceHandleForLane(when), data: { when } },
+      {
+        source,
+        target,
+        id,
+        sourceHandle: sourceHandleForLane(when),
+        data: { when },
+        ...edgeVisuals(when),
+      },
       next,
     ),
     conflict: collidingEdgeId(next, id),

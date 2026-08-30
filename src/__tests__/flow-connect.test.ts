@@ -337,13 +337,14 @@ test("U2 — sourceHandleForLane: 'error' maps to the handle id, success/absent 
   assert.equal(sourceHandleForLane(undefined), undefined);
 });
 
-test("U3 — applyConnect create-success: the minted edge carries no sourceHandle", () => {
+test("U3 — applyConnect create-success: the minted edge carries no sourceHandle and no error styling", () => {
   const next = applyConnect("a", "b", ABCD, []);
   assert.ok(next, "the connection must be allowed");
   assert.equal(next[0].sourceHandle, undefined);
+  assert.doesNotMatch(String(next[0].className ?? ""), /w6w-edge-error/);
 });
 
-test("U4 — applyConnect create-error: the minted edge carries ERROR_SOURCE_HANDLE and data.when", () => {
+test("U4 — applyConnect create-error: the minted edge carries ERROR_SOURCE_HANDLE, data.when, AND the visual className/label", () => {
   // Routed through laneForSourceHandle rather than a hard-coded "error"
   // literal — this is the same derivation `onConnect` performs off the
   // dragged handle id, so this case also pins that laneForSourceHandle's
@@ -354,6 +355,16 @@ test("U4 — applyConnect create-error: the minted edge carries ERROR_SOURCE_HAN
   // half-implementation — both are asserted in one case.
   assert.equal(next[0].sourceHandle, ERROR_SOURCE_HANDLE);
   assert.equal(next[0].data?.when, "error");
+  // 2026-08-30 regression: `planConnect` stamped `sourceHandle`/`data.when`
+  // correctly on a freshly DRAWN edge but never called `edgeVisuals(when)`,
+  // so a brand-new error edge rendered with no red dash / "on error" label
+  // until the next page load (only `planRelane`, re-laning an EXISTING
+  // edge, applied it). A wire-level-only assertion (sourceHandle/data.when
+  // above) does not catch this — the visual className/label must be
+  // asserted separately, on the CREATE path specifically, not only on
+  // re-lane (see U5 below).
+  assert.match(String(next[0].className ?? ""), /w6w-edge-error/);
+  assert.equal(next[0].label, "on error");
 });
 
 test("U5 — setEdgeWhen re-lanes the sourceHandle both ways on ONE edge object", () => {

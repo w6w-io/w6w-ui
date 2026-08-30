@@ -211,14 +211,16 @@ export function NodeConfigForm({
         </div>
       )}
 
-      {/* Notes */}
+      {/* Notes — shown under the step's own card on the canvas (2026-08-30),
+          not just here, so a description written once helps a reader orient
+          without opening every step. */}
       <label className="w6w-field">
         <span>Notes</span>
         <textarea
           rows={3}
           value={config.notes ?? ""}
           readOnly={readOnly}
-          placeholder="Notes about this step (not executed)…"
+          placeholder="A short description — shown under this step on the canvas. Not executed."
           onChange={(e) => onChange({ ...config, notes: e.target.value || undefined })}
         />
       </label>

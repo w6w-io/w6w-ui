@@ -2341,6 +2341,76 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   white-space: nowrap;
 }
 
+/* A pseudo-field wrapper (border/background, like every other field in this
+   form) CONTAINING two real buttons, spaced apart — `[App] <--> [Connection]`
+   (2026-08-30, fifth pass: "still missing border around SendGrid + prod...
+   look like before, where both were inside a pseudo field, only change was
+   to make the buttons look like buttons"). The outer border is back; each
+   button ALSO keeps its own border/background (one shade lighter,
+   `--w6w-panel` against the field's `--w6w-panel-2`) so it still reads as a
+   clickable button, not merely text, without the two touching directly —
+   the field's own padding is the gap between its edge and each button. */
+.w6w-app-conn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--w6w-sp-2);
+  background: var(--w6w-panel-2);
+  border: 1px solid var(--w6w-border);
+  border-radius: 8px;
+  min-height: 36px;
+  padding: var(--w6w-sp-1);
+}
+
+.w6w-app-conn-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--w6w-sp-2);
+  background: var(--w6w-panel);
+  border: 1px solid var(--w6w-border);
+  border-radius: 6px;
+  padding: var(--w6w-sp-1) var(--w6w-sp-2-5);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--w6w-text);
+}
+
+.w6w-app-conn-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.w6w-app-conn-btn:hover:not(:disabled),
+.w6w-app-conn-btn[aria-expanded=true] {
+  border-color: var(--w6w-accent);
+}
+
+/* A flyout popover (App/Connection pickers) — portaled to the enclosing
+   `<dialog>` so it floats OVER the modal's own scrollable body instead of
+   being clipped/squeezed inside it (`Flyout` component doc has the why).
+   Plain positioned div, not a nested native dialog. No max-height/overflow
+   of its own: `AppPicker` already caps and scrolls itself
+   (`.w6w-apppicker-host`, `min(70vh, 520px)`), and the plain connection
+   list is short enough in practice to size to content — a SECOND scroll
+   container nested inside this one would double-scroll `AppPicker`. */
+.w6w-flyout {
+  position: fixed;
+  z-index: 40;
+  /* No `box-sizing: border-box` reset elsewhere in this package (checked) —
+     the inline `width` set by `Flyout` is meant to match the anchor row
+     EXACTLY (2026-08-30: "should extend to the end of the prod button and
+     div"), so padding/border must come out of that width, not add to it. */
+  box-sizing: border-box;
+  background: var(--w6w-panel);
+  border: 1px solid var(--w6w-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: var(--w6w-sp-2);
+}
+
 .w6w-btn-sm {
   padding: var(--w6w-sp-1) var(--w6w-sp-2);
   font-size: var(--w6w-fs-xs);
@@ -2470,19 +2540,57 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   fill: var(--w6w-panel);
 }
 
+/* A step's own Notes, shown under its canvas card — human override,
+   2026-08-30, so a description written once (settings → gear icon) is
+   visible without opening the step. One line, clipped with an ellipsis (the
+   full text is still on the node's `title=` for a hover); `max-width`
+   matches the card's own `minWidth` so a short note never forces the row
+   wider than the card sitting above it. Font size matches the sibling
+   meta-line's own inline fontSize:10 (not scanned by this ratchet) directly
+   above it — the smallest declared token, --w6w-fs-xs, is 12px and would
+   visibly mismatch the two lines. */
+.w6w-flow .w6w-node-notes {
+  margin-top: var(--w6w-sp-0-5);
+  padding-left: var(--w6w-sp-0-5);
+  /* lint-tokens-allow: matches the sibling meta-line's inline fontSize:10 above it */
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.75;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The ordinary (success) ports — bumped from the library's own 6px default
+   (2026-08-30: "ports must have consistent size") to match the error port
+   below exactly. `:not(.w6w-handle-multi)`: the multi-input handle is its
+   own taller pill shape (`PortHandle`'s inline style), not a dot — this
+   rule must not touch it. */
+.w6w-flow .react-flow__handle:not(.w6w-handle-multi) {
+  width: 8px;
+  height: 8px;
+}
+
 /* The error exit port — a step/control node's second SOURCE handle (T1.1.1),
    rendered below the ordinary exit via the shared PortHandle component
    (`id={ERROR_SOURCE_HANDLE}`, `variant="error"`). Danger-tinted, same
-   --w6w-danger token as .w6w-edge-error above (never a hard-coded hex), and
-   deliberately SMALLER + dimmer than the default handle dot so the ordinary
-   exit still reads as the primary way out of a step — this is the door for
-   the failure path, not an equal alternative. */
+   --w6w-danger token as .w6w-edge-error above (never a hard-coded hex).
+   DELIBERATELY 1px SMALLER, in actual box size, than the ordinary ports
+   above (2026-08-30, second pass on "consistent size"): setting both to the
+   literal same 8px×8px box (the first pass) still read as bigger — measured
+   directly, computed styles for both were byte-identical (same width,
+   height, border-width, box-sizing, no box-shadow/outline difference) — a
+   saturated warm fill on a light canvas background perceptually "expands"
+   past a same-sized dark/cool one (the classic irradiation illusion), so
+   matching PIXELS does not produce matching APPEARANCE. Compensating with a
+   smaller literal box is what actually reads as equal. */
 .w6w-flow .react-flow__handle.w6w-handle-error {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   background: var(--w6w-danger);
   border-color: var(--w6w-danger);
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .w6w-flow .react-flow__handle.w6w-handle-error:hover {

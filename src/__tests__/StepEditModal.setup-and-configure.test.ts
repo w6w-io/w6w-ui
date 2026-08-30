@@ -180,93 +180,156 @@ function setupFields(container: Element): Element[] {
   return Array.from(stack.children).filter((el) => el.classList.contains("w6w-field"));
 }
 
-function changeButton(container: Element): HTMLButtonElement {
-  const btn = Array.from(container.querySelectorAll(".w6w-stepconfig-body button")).find(
-    (b) => b.textContent === "Change",
-  ) as HTMLButtonElement | undefined;
-  assert.ok(btn, "a Change button should be present on the Setup tab");
+/** The App button — `[app button] <-- spacer --> [connection button]`
+ *  (2026-08-30, superseding D-1's single combined field). Opens the app
+ *  picker (`AppPicker`) when clicked. */
+function appButton(container: Element): HTMLButtonElement {
+  const btn = container.querySelector(
+    '.w6w-stepconfig-body button[aria-label="App"]',
+  ) as HTMLButtonElement | null;
+  assert.ok(btn, "an App button should be present on the Setup tab");
   return btn;
 }
 
-test("U1 — the combined App+Connection field renders before Action, in document order", async () => {
+/** The Connection button — opens a plain list of connections for the
+ *  CURRENT app (no search box) plus "+ New connection". */
+function connButton(container: Element): HTMLButtonElement {
+  const btn = container.querySelector(
+    '.w6w-stepconfig-body button[aria-label="Connection"]',
+  ) as HTMLButtonElement | null;
+  assert.ok(btn, "a Connection button should be present on the Setup tab");
+  return btn;
+}
+
+/** Every app card `AppPicker` renders once the App button opens the picker
+ *  (not a `<select>` — the picker is a searchable grid, same component the
+ *  add-wizard uses). */
+// The App/Connection flyouts are PORTALED (`Flyout`, 2026-08-30) to the
+// enclosing `<dialog>` — not `document.body` (a `showModal()` dialog lives
+// in the top layer; a portal straight to `document.body` would render
+// BEHIND it, not over it) — so their content is no longer a DESCENDANT of
+// `.w6w-stepconfig-body`, only a sibling under the same dialog. These
+// helpers search the whole modal `container`, not that narrower scope.
+function appCards(container: Element): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll("button.w6w-apppicker-card")) as HTMLButtonElement[];
+}
+
+function clickAppCard(container: Element, displayName: string): void {
+  const card = appCards(container).find((b) => b.textContent?.includes(displayName));
+  assert.ok(card, `an app card for "${displayName}" should be present`);
+  card.click();
+}
+
+/** Every connection row the Connection button's picker renders (not a
+ *  `<select>`, and no search box — a plain list of the CURRENT app's
+ *  connections). Excludes the "+ New connection" button itself. */
+function connItems(container: Element): HTMLButtonElement[] {
+  return Array.from(
+    container.querySelectorAll(".w6w-flyout .w6w-stepbuilder-item"),
+  ) as HTMLButtonElement[];
+}
+
+function clickConnItem(container: Element, displayName: string): void {
+  const item = connItems(container).find((b) => b.textContent?.includes(displayName));
+  assert.ok(item, `a connection row for "${displayName}" should be present`);
+  item.click();
+}
+
+function newConnectionButton(container: Element): HTMLButtonElement | null {
+  return (
+    (Array.from(container.querySelectorAll(".w6w-flyout button")).find(
+      (b) => b.textContent === "+ New connection",
+    ) as HTMLButtonElement | undefined) ?? null
+  );
+}
+
+test("U1 — the App/Connection field renders before Action, in document order", async () => {
   const { container, root } = await mountOnSetupTab(STEP);
   const fields = setupFields(container);
   const labels = fields.map((f) => f.querySelector("span")?.textContent);
   assert.deepStrictEqual(
     labels,
     ["App", "Action"],
-    "exactly two Setup fields, the combined App field first and Action second — no standalone Connection field",
+    "exactly two Setup fields, the App+Connection row first and Action second",
   );
   await act(async () => {
     root.unmount();
   });
 });
 
-test("U2 — exactly one Change button, and the collapsed row names both the app and the connection", async () => {
+test("U2 — App and Connection are two SEPARATE buttons, spaced apart, each naming its own value", async () => {
   const { container, root } = await mountOnSetupTab(STEP);
-  const buttons = Array.from(container.querySelectorAll(".w6w-stepconfig-body button")).filter(
-    (b) => b.textContent === "Change",
+  const app = appButton(container);
+  const conn = connButton(container);
+  assert.notEqual(
+    app,
+    conn,
+    "App and Connection must be two distinct buttons, not one combined field",
   );
-  assert.equal(
-    buttons.length,
-    1,
-    "exactly one Change button — a two-button AppStepConfig port (D-1) would fail this",
-  );
-  const row = container.querySelector(".w6w-stepconfig-body .w6w-conn-label");
-  assert.ok(row, "the collapsed field should render a .w6w-conn-label row");
   // `AppsCtx` is empty in this rig (D-P1) — the app label falls back to the
   // raw app id, exactly like the pre-existing App field always has.
-  assert.ok(row.textContent?.includes("sendgrid"), "the row names the app");
-  assert.ok(row.textContent?.includes("prod"), "the row names the connection");
+  assert.ok(app.textContent?.includes("sendgrid"), "the App button names the app");
+  assert.ok(!app.textContent?.includes("prod"), "the App button does not also name the connection");
+  assert.ok(conn.textContent?.includes("prod"), "the Connection button names the connection");
+  assert.ok(
+    !conn.textContent?.includes("sendgrid"),
+    "the Connection button does not also name the app",
+  );
+  // Spaced apart: the shared row is `justify-content: space-between`.
+  const row = app.closest(".w6w-app-conn-row");
+  assert.ok(row, "App and Connection share a .w6w-app-conn-row container");
+  assert.ok(row?.contains(conn), "Connection sits in the same row as App");
   await act(async () => {
     root.unmount();
   });
 });
 
-test("U3 — readOnly disables the Change button", async () => {
+test("U3 — readOnly disables both the App and Connection buttons", async () => {
   const { container, root } = await mountOnSetupTab(STEP, { readOnly: true });
-  const btn = changeButton(container);
-  assert.equal(btn.disabled, true);
+  assert.equal(appButton(container).disabled, true);
+  assert.equal(connButton(container).disabled, true);
   await act(async () => {
     root.unmount();
   });
 });
 
-test("U4 — clicking Change reveals an app <select> populated from listApps()", async () => {
+test("U4 — clicking App reveals AppPicker's searchable grid, populated from listApps()", async () => {
   const { container, root } = await mountOnSetupTab(STEP);
   await act(async () => {
-    changeButton(container).click();
+    appButton(container).click();
   });
   await flush();
 
-  const appSelect = container.querySelector('select[aria-label="App"]') as HTMLSelectElement | null;
-  assert.ok(appSelect, "an app <select> should be present after Change");
-  const values = Array.from(appSelect.options)
-    .map((o) => o.value)
+  const names = appCards(container)
+    .map((b) => b.textContent ?? "")
     .sort();
-  assert.deepStrictEqual(values, ["sendgrid", "slack"], "options come from listApps()");
-
-  const connSelect = container.querySelector(
-    'select[aria-label="Connection"]',
-  ) as HTMLSelectElement | null;
-  assert.ok(connSelect, "a connection <select> for the selected app should be present too (A3)");
+  assert.equal(names.length, 2, "AppPicker's grid should render one card per listApps() entry");
+  assert.ok(
+    names[0]?.includes("SendGrid") || names[1]?.includes("SendGrid"),
+    "SendGrid is offered",
+  );
+  assert.ok(names[0]?.includes("Slack") || names[1]?.includes("Slack"), "Slack is offered");
+  // Neither picker is a raw <select> — "you cannot use a dropdown" (2026-08-30).
+  assert.equal(
+    container.querySelector('select[aria-label="App"]'),
+    null,
+    "the app changer must not be a <select>",
+  );
 
   await act(async () => {
     root.unmount();
   });
 });
 
-test("U5 — selecting a DIFFERENT app commits app/action/connection/with together, in one payload", async () => {
+test("U5 — selecting a DIFFERENT app commits app/action/connection/with together, in one payload, and lands collapsed", async () => {
   const { container, root, changes } = await mountOnSetupTab(STEP);
   await act(async () => {
-    changeButton(container).click();
+    appButton(container).click();
   });
   await flush();
 
-  const appSelect = container.querySelector('select[aria-label="App"]') as HTMLSelectElement;
   await act(async () => {
-    appSelect.value = "slack";
-    appSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    clickAppCard(container, "Slack");
   });
 
   assert.equal(changes.length, 1, "exactly one commit for the app switch");
@@ -279,11 +342,15 @@ test("U5 — selecting a DIFFERENT app commits app/action/connection/with togeth
   assert.equal(payload.uses.connection, undefined);
   assert.deepStrictEqual(payload.with, {});
 
-  // The collapsed field is reachable again without remounting the modal (A3).
+  // A different app is "start over": the field lands COLLAPSED (not the
+  // connection picker — there is nothing yet to pick a connection for that
+  // isn't already implied by the fresh, connection-less app).
   await flush();
-  assert.ok(
-    container.querySelector(".w6w-stepconfig-body .w6w-conn-label"),
-    "the field returns to its collapsed display after a pick",
+  assert.ok(appButton(container), "the App button is reachable again after a different-app pick");
+  assert.equal(
+    container.querySelector(".w6w-stepconfig-body .w6w-stepbuilder-item"),
+    null,
+    "the connection picker must NOT auto-open on a different-app pick",
   );
 
   await act(async () => {
@@ -291,19 +358,19 @@ test("U5 — selecting a DIFFERENT app commits app/action/connection/with togeth
   });
 });
 
-test("U6 — selecting the SAME app leaves uses.action and with deep-equal to the original fixture", async () => {
+test("U6 — selecting the SAME app leaves uses.action and with untouched, and opens the connection picker", async () => {
   const { container, root, changes } = await mountOnSetupTab(STEP);
   await act(async () => {
-    changeButton(container).click();
+    appButton(container).click();
   });
   await flush();
 
-  const appSelect = container.querySelector('select[aria-label="App"]') as HTMLSelectElement;
   await act(async () => {
-    appSelect.value = "sendgrid";
-    appSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    clickAppCard(container, "SendGrid");
   });
 
+  // Same-app reselect still commits (so the field's `uses.app` round-trips
+  // through the same path as a real change), but literally unchanged.
   const payload = changes[changes.length - 1] as {
     uses: { app: string; action: string; connection?: string };
     with: unknown;
@@ -315,6 +382,15 @@ test("U6 — selecting the SAME app leaves uses.action and with deep-equal to th
   assert.equal(payload.uses.connection, "conn_1");
   assert.deepStrictEqual(payload.with, { subject: "Hello" });
 
+  // "close the dropdown, and show the connections dropdown instead" — the ask
+  // (2026-08-30): same-app reselect goes straight to the connection picker,
+  // not back to collapsed.
+  await flush();
+  assert.ok(
+    connItems(container).length > 0,
+    "the connection picker opens automatically after a same-app reselect",
+  );
+
   await act(async () => {
     root.unmount();
   });
@@ -323,14 +399,12 @@ test("U6 — selecting the SAME app leaves uses.action and with deep-equal to th
 test("U7 — after switching app, the Action <select> lists the NEW app's actions and none of the old app's", async () => {
   const { container, root } = await mountOnSetupTab(STEP);
   await act(async () => {
-    changeButton(container).click();
+    appButton(container).click();
   });
   await flush();
 
-  const appSelect = container.querySelector('select[aria-label="App"]') as HTMLSelectElement;
   await act(async () => {
-    appSelect.value = "slack";
-    appSelect.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    clickAppCard(container, "Slack");
   });
   await flush();
 
@@ -353,12 +427,117 @@ test("U7 — after switching app, the Action <select> lists the NEW app's action
   });
 });
 
-test("U2/M4-guard — Change never renders twice (no AppStepConfig-shaped App-Change + Connection-Change pair)", async () => {
-  const { container, root } = await mountOnSetupTab(STEP);
-  const buttons = Array.from(container.querySelectorAll(".w6w-stepconfig-body button")).filter(
-    (b) => b.textContent === "Change",
+test('U12 — clicking App a SECOND time closes its flyout without picking anything (the "changed my mind" case)', async () => {
+  const { container, root, changes } = await mountOnSetupTab(STEP);
+  await act(async () => {
+    appButton(container).click();
+  });
+  await flush();
+  assert.ok(appCards(container).length > 0, "the app picker is open");
+
+  // The trigger button must still be there AND still be the way to close —
+  // "since you removed the App button instead of using it as anchor for
+  // the dropdown, I can't click it again to close the dropdown" (2026-08-30).
+  await act(async () => {
+    appButton(container).click();
+  });
+  await flush();
+
+  assert.equal(appCards(container).length, 0, "the app picker closes on a second click of App");
+  assert.equal(changes.length, 0, "closing without picking commits nothing");
+  assert.ok(appButton(container), "the App button is still there afterward, unchanged");
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("U13 — clicking outside the flyout closes it without picking anything", async () => {
+  const { container, root, changes } = await mountOnSetupTab(STEP);
+  await act(async () => {
+    connButton(container).click();
+  });
+  await flush();
+  assert.ok(connItems(container).length > 0, "the connection picker is open");
+
+  // A click on the modal body, outside both the trigger and the flyout.
+  await act(async () => {
+    const body = container.querySelector(".w6w-stepconfig-body");
+    assert.ok(body);
+    body.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true }));
+  });
+  await flush();
+
+  assert.equal(connItems(container).length, 0, "the connection picker closes on an outside click");
+  assert.equal(changes.length, 0, "closing without picking commits nothing");
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("U10 — the connection picker lists the current app's connections, no search box, and commits ONLY uses.connection", async () => {
+  const { container, root, changes } = await mountOnSetupTab(STEP);
+  await act(async () => {
+    connButton(container).click();
+  });
+  await flush();
+
+  assert.equal(
+    container.querySelector(".w6w-stepconfig-body input[type=text]"),
+    null,
+    "no search box in the connection picker — the ask was explicit: no search bar",
   );
-  assert.equal(buttons.length, 1);
+  const items = connItems(container).map((b) => b.textContent ?? "");
+  assert.ok(
+    items.some((t) => t.includes("prod")),
+    "the current app's own connection(s) are listed",
+  );
+  assert.ok(newConnectionButton(container), '"+ New connection" is offered');
+
+  await act(async () => {
+    clickConnItem(container, "prod");
+  });
+
+  assert.equal(changes.length, 1, "exactly one commit for the connection pick");
+  const payload = changes[0] as {
+    uses: { app: string; action: string; connection?: string };
+    with: unknown;
+  };
+  // Only the connection changes — app/action/with are untouched (identity-
+  // equal to the fixture, not merely equal, since nothing should have rebuilt
+  // them).
+  assert.equal(payload.uses.app, "sendgrid");
+  assert.equal(payload.uses.action, "send");
+  assert.equal(payload.uses.connection, "conn_1");
+  assert.deepStrictEqual(payload.with, { subject: "Hello" });
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test('U11 — "+ New connection" opens AddConnectionModal, scoped to the current app', async () => {
+  const { container, root } = await mountOnSetupTab(STEP);
+  await act(async () => {
+    connButton(container).click();
+  });
+  await flush();
+
+  await act(async () => {
+    newConnectionButton(container)?.click();
+  });
+  await flush();
+
+  // AddConnectionModal renders its own dialog (Modal.tsx) — presence is
+  // enough here; its own create-flow is covered by its own test suite.
+  const dialogs = Array.from(container.querySelectorAll("dialog"));
+  assert.equal(
+    dialogs.length,
+    2,
+    "a SECOND dialog (AddConnectionModal) opens on top of the step edit modal's own",
+  );
+
   await act(async () => {
     root.unmount();
   });
