@@ -344,7 +344,11 @@ test("U3 — applyConnect create-success: the minted edge carries no sourceHandl
 });
 
 test("U4 — applyConnect create-error: the minted edge carries ERROR_SOURCE_HANDLE and data.when", () => {
-  const next = applyConnect("a", "b", ABCD, [], "error");
+  // Routed through laneForSourceHandle rather than a hard-coded "error"
+  // literal — this is the same derivation `onConnect` performs off the
+  // dragged handle id, so this case also pins that laneForSourceHandle's
+  // output threads all the way through to the stamped edge.
+  const next = applyConnect("a", "b", ABCD, [], laneForSourceHandle(ERROR_SOURCE_HANDLE));
   assert.ok(next, "the connection must be allowed");
   // A stamp without the lane, or a lane without the stamp, is a real
   // half-implementation — both are asserted in one case.
