@@ -77,16 +77,24 @@ export interface ExpressionStepSource {
  * `documents.<key>.<field>` per top-level field when it qualifies).
  *
  * A document contributes field sub-entries **iff**: `doc.format === "json"`
- * AND `JSON.parse(doc.content)` succeeds into a plain object — where *plain
- * object* means `typeof v === "object" && v !== null && !Array.isArray(v)`.
- * This mirrors the engine's own gate bit-for-bit: `documentsSeed`
+ * AND `JSON.parse(doc.content)` succeeds into a plain object, OR
+ * `doc.format === "yaml"` AND npm `yaml`'s `parse(doc.content)` succeeds into
+ * a plain object — where *plain object* means
+ * `typeof v === "object" && v !== null && !Array.isArray(v)`. This mirrors
+ * the engine's own gate: `documentsSeed`
  * (`packages/server/packages/api/run-seed.ts`, read-only, out of scope) is the
- * authority — `format === "json"`, then a `try/catch JSON.parse`, falling
- * back to the raw content string on either a non-`json` format or a throw.
- * Every non-`json` format, and a `json` document whose parse throws or yields
- * a non-plain-object (array/scalar), is excluded — offering a field ref
- * outside this gate would fail at run time with `render_ref_unresolved`,
- * because the run scope itself never parsed that document.
+ * authority for each format — `format === "json"` or `format === "yaml"`,
+ * then a `try/catch` parse, falling back to the raw content string on either
+ * a non-matching format or a throw. `text`/`markdown`/`html` documents, and a
+ * `json`/`yaml` document whose parse throws or yields a non-plain-object
+ * (array/scalar), are excluded — offering a field ref outside this gate would
+ * fail at run time with `render_ref_unresolved`, because the run scope itself
+ * never parsed that document into an object.
+ *
+ * The two parsers (`@std/yaml` server-side, npm `yaml` here) are not
+ * identical for every input — they diverge on tab-indented content and on an
+ * unresolvable custom tag, both accepted, tested debt (D-3) — but agree on
+ * everything else, including a plain JSON object (JSON is a subset of YAML).
  */
 export interface ExpressionDocumentSource {
   /** Document key — the key under `documents` in the run scope. */
