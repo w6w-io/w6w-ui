@@ -137,10 +137,12 @@ export function NodeConfigForm({
             onChange({ ...config, onError: v === "fail" ? undefined : v });
           }}
         >
-          <option value="fail">Stop on error (default)</option>
-          <option value="continue">Continue</option>
+          <option value="fail">Stop the run (default)</option>
+          <option value="continue">Continue to the next step</option>
           {hasGraph && (
-            <option value="continue-record">Continue &amp; record error in end state</option>
+            <option value="continue-record">
+              Continue to the next step &amp; record the error
+            </option>
           )}
         </select>
         {hasGraph ? (
@@ -151,17 +153,31 @@ export function NodeConfigForm({
           // additive `reroute` below) and has no view of the graph, so it cannot
           // know whether the step has such an edge, and giving it one just to
           // find out is out of scope.
+          //
+          // Ordering per rfcs/workflow.md's Amendment — 2026-07-29 (failure-
+          // conditioned edges): retries come first (only a *finally* failed
+          // attempt reaches this policy at all); Continue/Continue & record
+          // both carry on down this step's normal outgoing edges despite the
+          // failure; an outgoing error edge overrides all of the above. The
+          // drag gesture named below is the SAME one `LANE_HINT` (T1.1.1)
+          // describes for the error exit port — not re-derived here.
           <span className="w6w-muted w6w-small">
-            If this step has an outgoing <strong>error</strong> edge on the canvas, that edge
-            decides what happens when the step fails and this policy is not consulted. To author
-            one: select the edge and set <em>Run on: Error</em> — draw the fallback edge first, then
-            the success edge.
+            Retries run first: this policy is reached only once this step's retry attempts (if any)
+            are exhausted — a run that succeeds on a later attempt continues down the normal path
+            instead. Once reached, <strong>Continue</strong> and{" "}
+            <strong>Continue &amp; record the error</strong> both carry on down this step's ordinary
+            outgoing edges despite the failure. If this step has an outgoing <strong>error</strong>{" "}
+            edge on the canvas, that edge decides what happens instead and this policy is not
+            consulted — drawn by dragging from the step's error exit port.
           </span>
         ) : (
           // Graph-less host: there is no canvas and so no error edge to draw —
-          // the reroute field below is this host's equivalent.
+          // the reroute field below is this host's equivalent. Must not
+          // contradict the graph arm above: retries still come first here too.
           <span className="w6w-muted w6w-small">
-            This step has no canvas of its own, so it can't carry an error edge. Set a{" "}
+            Retries run first: this policy (and reroute, below) is only reached once this step's
+            retry attempts (if any) are exhausted — a run that succeeds on a later attempt continues
+            normally. This step has no canvas of its own, so it can't carry an error edge. Set a{" "}
             <strong>reroute</strong> target below to send a failure somewhere else instead of
             stopping.
           </span>

@@ -1961,14 +1961,18 @@ export function StepEditModal({
   const [conns, setConns] = useState<ConnectionSummary[] | null>(null);
   const isInternal = isInternalApp(step.uses.app);
 
-  // Refetch actions + params whenever the app/action identity changes.
+  // Refetch actions + params whenever the app/action identity changes. P-3:
+  // this must refetch on an APP change alone (action `""` included) — an
+  // early return here on a missing action left `actions` holding the
+  // PREVIOUS app's list, stale-ing the Action <select> after Change (D-1).
   useEffect(() => {
     if (isInternal) {
       setParams(internalNodeParams(step.uses.app, step.uses.action));
       setActions(null);
       return;
     }
-    if (!step.uses.app || !step.uses.action) {
+    if (!step.uses.app) {
+      setActions(null);
       setParams([]);
       return;
     }
@@ -1979,7 +1983,9 @@ export function StepEditModal({
       .then((acts) => {
         if (canceled) return;
         setActions(acts);
-        setParams(acts.find((a) => a.key === step.uses.action)?.params ?? []);
+        setParams(
+          step.uses.action ? (acts.find((a) => a.key === step.uses.action)?.params ?? []) : [],
+        );
       })
       .catch(() => !canceled && setParams([]));
     return () => {
@@ -2181,6 +2187,21 @@ export function StepEditModal({
               onChangeConnection={(connection) =>
                 commit({ ...step, uses: { ...step.uses, connection } })
               }
+              onChangeApp={(appId) =>
+                // D-1: a genuinely different app clears `uses.action`/`with` and
+                // drops the connection; reselecting the SAME app is a no-op —
+                // still committed (so the field always collapses cleanly), but
+                // with `step` itself, unchanged.
+                commit(
+                  appId === step.uses.app
+                    ? step
+                    : {
+                        ...step,
+                        uses: { app: appId, action: "", connection: undefined },
+                        with: {},
+                      },
+                )
+              }
             />
           )}
 
@@ -2233,7 +2254,9 @@ export function StepEditModal({
                     onChange={(c) => commit({ ...step, ...c })}
                     readOnly={readOnly}
                   />
-                  <StepPortsControl step={step} readOnly={readOnly} onChange={commit} />
+                  {SHOW_STEP_PORTS && (
+                    <StepPortsControl step={step} readOnly={readOnly} onChange={commit} />
+                  )}
                 </div>
               )}
             </>
@@ -2338,6 +2361,9 @@ export function StepEditModal({
 
 /** Default in-cardinality applied when a step is opted into multiple inbound edges. */
 const MULTI_IN_DEFAULT = 10;
+
+/** Hidden for now (26-08-30-00-fixes item 3). Flip to `true` to restore; nothing else changes. */
+const SHOW_STEP_PORTS = false;
 
 /**
  * Opt a step into accepting **multiple** incoming edges by setting `step.ports.in`
@@ -2474,8 +2500,8 @@ function WebhookUrlPanel({
 }
 
 /**
- * The Setup tab — the step's app (read-only), its action (a dropdown for app
- * steps), and its connection. Mirrors the top of a Zapier node.
+ * The Setup tab — one combined App+Connection field (D-1), then the step's
+ * action (a dropdown for app steps). Mirrors the top of a Zapier node.
  */
 function SetupTab({
   step,
@@ -2486,6 +2512,7 @@ function SetupTab({
   readOnly,
   onChangeAction,
   onChangeConnection,
+  onChangeApp,
 }: {
   step: FlowStep;
   app: AppSummary | undefined;
@@ -2495,25 +2522,105 @@ function SetupTab({
   readOnly?: boolean;
   onChangeAction: (action: string) => void;
   onChangeConnection: (connection: string | undefined) => void;
+  /** Fires with whatever app is picked in the Change flow, same or different —
+   *  D-1's "clear on a genuinely different app, no-op on the same app" decision
+   *  is the caller's (it already owns the equivalent decision for `onChangeAction`). */
+  onChangeApp: (appId: string) => void;
 }) {
+  const api = useW6WApi();
+  // Change (D-1) returns the combined field to a picking state; the collapsed
+  // display is reachable again — by picking a value — without remounting the
+  // modal (A3). Local, ephemeral UI state: the tab unmounts on tab-switch, so
+  // it always starts collapsed.
+  const [picking, setPicking] = useState(false);
+  const [pickerApps, setPickerApps] = useState<AppSummary[] | null>(null);
+
+  // D-P1: the app list comes from api.listApps(), fetched only once Change is
+  // clicked — AppsCtx is not exported and structurally ungateable here.
+  useEffect(() => {
+    if (!picking) return;
+    let canceled = false;
+    api
+      .listApps()
+      .then((list) => !canceled && setPickerApps(list))
+      .catch(() => !canceled && setPickerApps([]));
+    return () => {
+      canceled = true;
+    };
+  }, [api, picking]);
+
+  const connName = step.uses.connection
+    ? ((conns ?? []).find((c) => c.id === step.uses.connection)?.displayName ??
+      step.uses.connection)
+    : "No connection";
+
   return (
     <div className="w6w-stack">
       <div className="w6w-field">
         <span>App</span>
-        <div className="w6w-conn-label">
-          {!isInternal && app && (
-            <AppIcon
-              src={app.iconSvg}
-              srcDark={app.iconSvgDark}
-              brandColor={app.brandColor}
-              name={app.displayName}
-              size={20}
-            />
-          )}
-          <span className="w6w-conn-label-name">
-            {isInternal ? step.uses.app : (app?.displayName ?? step.uses.app)}
-          </span>
-        </div>
+        {!isInternal && picking ? (
+          <>
+            <select
+              aria-label="App"
+              value={step.uses.app}
+              disabled={readOnly}
+              onChange={(e) => {
+                onChangeApp(e.target.value);
+                setPicking(false);
+              }}
+            >
+              {pickerApps === null && <option value={step.uses.app}>{step.uses.app}</option>}
+              {(pickerApps ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.displayName}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Connection"
+              value={step.uses.connection ?? ""}
+              disabled={readOnly}
+              onChange={(e) => {
+                onChangeConnection(e.target.value || undefined);
+                setPicking(false);
+              }}
+            >
+              <option value="">— none —</option>
+              {(conns ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName || c.id}
+                  {c.state ? ` (${c.state})` : ""}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <div className="w6w-conn-label">
+            {!isInternal && app && (
+              <AppIcon
+                src={app.iconSvg}
+                srcDark={app.iconSvgDark}
+                brandColor={app.brandColor}
+                name={app.displayName}
+                size={20}
+              />
+            )}
+            <span className="w6w-conn-label-name">
+              {isInternal ? step.uses.app : (app?.displayName ?? step.uses.app)}
+              {!isInternal && ` · ${connName}`}
+            </span>
+            {!isInternal && (
+              <button
+                type="button"
+                className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                disabled={readOnly}
+                onClick={() => setPicking(true)}
+              >
+                Change
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isInternal ? (
@@ -2535,25 +2642,6 @@ function SetupTab({
             {(actions ?? []).map((a) => (
               <option key={a.key} value={a.key}>
                 {a.title ?? a.key}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {!isInternal && (
-        <label className="w6w-field">
-          <span>Connection</span>
-          <select
-            value={step.uses.connection ?? ""}
-            disabled={readOnly}
-            onChange={(e) => onChangeConnection(e.target.value || undefined)}
-          >
-            <option value="">— none —</option>
-            {(conns ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.displayName || c.id}
-                {c.state ? ` (${c.state})` : ""}
               </option>
             ))}
           </select>
