@@ -72,6 +72,7 @@ import {
   setEdgeWhen,
 } from "./flow-connect.ts";
 import {
+  ERROR_SOURCE_HANDLE,
   type FlowStep,
   type FlowWorkflow,
   WEBHOOK_APP,
@@ -81,6 +82,7 @@ import {
   isControlApp,
   isInternalApp,
   isTriggerApp,
+  laneForSourceHandle,
   nodePortsForStep,
 } from "./flow-types.ts";
 import {
@@ -123,18 +125,21 @@ import type {
 import { useSeedSources } from "./use-seed-sources.ts";
 
 /**
- * The authoring recipe for the second outgoing wire, shown on the lane control.
+ * What the "Run on" control does, shown on the lane panel (T1.1.1).
  *
- * Every new edge is created in the SUCCESS lane (`applyConnect`'s default), and
- * each lane holds one edge out of an `out: 1` step — so drawing the success edge
- * first and then dragging a second one just re-points the first (the deliberate
- * single-slot UX). Marking the first wire as the error lane frees the success
- * lane, which is why the order matters.
+ * An error edge is authored by DRAGGING from the step's error exit port (the
+ * second, red-tinted source handle every step/control node renders below its
+ * ordinary exit) — that's what stamps `sourceHandle`/`data.when` at creation
+ * time (`onConnect` → `laneForSourceHandle`). This panel is not how an error
+ * edge is first drawn; it is the RE-LANE affordance for an edge already drawn,
+ * for when it was dragged from the wrong port. Each lane still holds one edge
+ * out of an `out: 1` step, so switching an edge into a lane that's already
+ * occupied re-points the incumbent (the deliberate single-slot UX).
  */
 const LANE_HINT =
-  "Which outcome of the source step this edge carries. A new edge is always drawn on Success, " +
-  "so to end up with two outgoing wires: draw the fallback edge first, mark it Error, " +
-  "then draw the success edge. An error edge overrides the step’s “On error” policy.";
+  "Which outcome of the source step this edge carries. An error edge is drawn by dragging " +
+  "from the step's error exit port; use this control to re-lane an edge already drawn. " +
+  "An error edge overrides the step’s “On error” policy.";
 
 /**
  * The step ids the refused edge id is minted from: the endpoints of the edge being
@@ -329,6 +334,13 @@ function Inner({
     nodeId: string;
     handleType: "source" | "target";
     position: { x: number; y: number };
+    /**
+     * The lane the drag originated from, derived via {@link laneForSourceHandle}
+     * at CAPTURE time in `onConnectEnd` (T1.1.1) — a target-handle drag reports a
+     * handle id that is never `ERROR_SOURCE_HANDLE`, so this naturally reads
+     * "success" for that gesture without a separate branch.
+     */
+    lane: "success" | "error";
   } | null>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
   // React Flow's `colorMode` defaults to "light", so without this its chrome
@@ -363,8 +375,18 @@ function Inner({
   const onConnect = useCallback(
     (params: Parameters<typeof addEdge>[0]) => {
       if (readOnly) return;
-      // applyConnect replaces a full single-slot port rather than ignoring the drop.
-      const next = applyConnect(params.source, params.target, nodes, edges);
+      // The lane rides on the handle the wire was dragged from (T1.1.1) — the
+      // one canonicalisation point, so a handle-to-handle drag and the
+      // drag-to-empty-canvas gesture in `onConnectEnd` cannot disagree on what
+      // counts as the error port. applyConnect replaces a full single-slot port
+      // rather than ignoring the drop.
+      const next = applyConnect(
+        params.source,
+        params.target,
+        nodes,
+        edges,
+        laneForSourceHandle(params.sourceHandle),
+      );
       if (!next) {
         // FAIL LOUDLY when the refusal is one the drag could not have shown. Every
         // ordinary rule already ran in `isValidConnection` (React Flow marks the
@@ -379,7 +401,13 @@ function Inner({
         // state, so `onSelectionChange` (re-invoked on any re-render) confirms it
         // instead of wiping it before paint — which both reveals that panel and
         // highlights the wire the author has to rename.
-        const conflict = connectConflict(params.source, params.target, nodes, edges);
+        const conflict = connectConflict(
+          params.source,
+          params.target,
+          nodes,
+          edges,
+          laneForSourceHandle(params.sourceHandle),
+        );
         if (!conflict) return;
         setEdges(edges.map((e) => ({ ...e, selected: e.id === conflict })));
         setSelectedEdgeId(conflict);
@@ -420,7 +448,18 @@ function Inner({
       }
       const point = "changedTouches" in event ? event.changedTouches[0] : event;
       const position = screenToFlowPosition({ x: point.clientX, y: point.clientY });
-      setPendingConnect({ nodeId: fromNode.id, handleType, position });
+      // The lane is derived HERE, not re-derived at `addBuiltStep` time
+      // (T1.1.1): the dragged handle is only available on `connectionState`,
+      // which does not survive past this callback — the step builder opens in
+      // between. A target-handle drag reports a handle id that is never
+      // `ERROR_SOURCE_HANDLE`, so this naturally reads "success" for that
+      // gesture with no separate branch.
+      setPendingConnect({
+        nodeId: fromNode.id,
+        handleType,
+        position,
+        lane: laneForSourceHandle(connectionState.fromHandle?.id),
+      });
       setBuilderOpen(true);
     },
     [readOnly, screenToFlowPosition, nodes],
@@ -617,7 +656,10 @@ function Inner({
           pendingConnect.handleType === "target"
             ? [id, pendingConnect.nodeId]
             : [pendingConnect.nodeId, id];
-        nextEdges = applyConnect(source, target, nextNodes, edges) ?? edges;
+        // The lane captured at drag-release time (T1.1.1) — a step spawned by
+        // dragging the error port onto empty canvas is wired error, one spawned
+        // from the ordinary exit is wired success.
+        nextEdges = applyConnect(source, target, nextNodes, edges, pendingConnect.lane) ?? edges;
       }
 
       setNodes(nextNodes);
@@ -1109,8 +1151,11 @@ function Inner({
                     `Edge.when`). Revealed only when exactly ONE edge is selected —
                     `selectedEdgeId` is already `edgeSel[0]`, so selecting a node or
                     nothing hides it. top-left is `+ Step`, Controls are bottom-left,
-                    the MiniMap bottom-right. No id'd source handles (D-T1-7): the lane
-                    is chosen here, not by which handle the wire was dragged from. */}
+                    the MiniMap bottom-right. D-T1-7 SUPERSEDED (T1.1.1): id'd source
+                    handles now exist (the error exit port), so a fresh edge's lane IS
+                    chosen by which handle it was dragged from — this panel keeps its
+                    job as the RE-LANE affordance for an edge already drawn on the
+                    wrong port, not the only way to author an error edge. */}
                 {!readOnly && selectedEdge && (
                   <Panel position="top-right">
                     <div className="w6w-edge-lane">
@@ -1610,28 +1655,44 @@ function StepRunCollect({
  * Flow's default dot, while `multiple` (cardinality > 1) renders a taller,
  * segmented bar so a node that accepts several inbound edges reads differently
  * from a single-in node (see core rfcs/node-types.md · Ports & cardinality).
+ *
+ * `variant === "error"` (T1.1.1) renders the second, visually subordinate
+ * source handle every step/control node's error exit uses — `id` is what
+ * lets React Flow (and `laneForSourceHandle`) tell it apart from the node's
+ * ordinary, unnamed exit. The ONE shared handle component for both — no
+ * second handle component and no raw inline `<Handle>` at either node card's
+ * call site (`building-blocks.md`'s anti-duplication callout).
  */
 function PortHandle({
   type,
   position,
   multiple,
+  id,
+  variant,
 }: {
   type: "source" | "target";
   position: Position;
   multiple: boolean;
+  id?: string;
+  variant?: "error";
 }) {
   return (
     <Handle
       type={type}
       position={position}
-      className={multiple ? "w6w-handle-multi" : undefined}
+      id={id}
+      className={
+        variant === "error" ? "w6w-handle-error" : multiple ? "w6w-handle-multi" : undefined
+      }
       style={multiple ? { height: 22, borderRadius: 3, width: 8 } : undefined}
       title={
-        multiple
-          ? type === "target"
-            ? "Accepts multiple incoming connections"
-            : "Multiple outgoing connections"
-          : undefined
+        variant === "error"
+          ? "On error — drag to route this step's failure separately"
+          : multiple
+            ? type === "target"
+              ? "Accepts multiple incoming connections"
+              : "Multiple outgoing connections"
+            : undefined
       }
     />
   );
@@ -1759,7 +1820,16 @@ function StepNodeCard({ id, data, selected }: NodeProps<StepNode>) {
           </div>
         </div>
         {ports.out > 0 && (
-          <PortHandle type="source" position={Position.Right} multiple={ports.out > 1} />
+          <>
+            <PortHandle type="source" position={Position.Right} multiple={ports.out > 1} />
+            <PortHandle
+              type="source"
+              position={Position.Bottom}
+              multiple={false}
+              id={ERROR_SOURCE_HANDLE}
+              variant="error"
+            />
+          </>
         )}
       </div>
       {/* Meta line under the card: the step id and (when known) the app version. */}
@@ -1813,7 +1883,16 @@ function ControlNodeCard({ id, data, selected }: NodeProps<StepNode>) {
           </div>
         </div>
         {ports.out > 0 && (
-          <PortHandle type="source" position={Position.Right} multiple={ports.out > 1} />
+          <>
+            <PortHandle type="source" position={Position.Right} multiple={ports.out > 1} />
+            <PortHandle
+              type="source"
+              position={Position.Bottom}
+              multiple={false}
+              id={ERROR_SOURCE_HANDLE}
+              variant="error"
+            />
+          </>
         )}
       </div>
       {/* Meta line under the card: the step id (internal nodes carry no version). */}
@@ -1882,14 +1961,18 @@ export function StepEditModal({
   const [conns, setConns] = useState<ConnectionSummary[] | null>(null);
   const isInternal = isInternalApp(step.uses.app);
 
-  // Refetch actions + params whenever the app/action identity changes.
+  // Refetch actions + params whenever the app/action identity changes. P-3:
+  // this must refetch on an APP change alone (action `""` included) — an
+  // early return here on a missing action left `actions` holding the
+  // PREVIOUS app's list, stale-ing the Action <select> after Change (D-1).
   useEffect(() => {
     if (isInternal) {
       setParams(internalNodeParams(step.uses.app, step.uses.action));
       setActions(null);
       return;
     }
-    if (!step.uses.app || !step.uses.action) {
+    if (!step.uses.app) {
+      setActions(null);
       setParams([]);
       return;
     }
@@ -1900,7 +1983,9 @@ export function StepEditModal({
       .then((acts) => {
         if (canceled) return;
         setActions(acts);
-        setParams(acts.find((a) => a.key === step.uses.action)?.params ?? []);
+        setParams(
+          step.uses.action ? (acts.find((a) => a.key === step.uses.action)?.params ?? []) : [],
+        );
       })
       .catch(() => !canceled && setParams([]));
     return () => {
@@ -2102,6 +2187,21 @@ export function StepEditModal({
               onChangeConnection={(connection) =>
                 commit({ ...step, uses: { ...step.uses, connection } })
               }
+              onChangeApp={(appId) =>
+                // D-1: a genuinely different app clears `uses.action`/`with` and
+                // drops the connection; reselecting the SAME app is a no-op —
+                // still committed (so the field always collapses cleanly), but
+                // with `step` itself, unchanged.
+                commit(
+                  appId === step.uses.app
+                    ? step
+                    : {
+                        ...step,
+                        uses: { app: appId, action: "", connection: undefined },
+                        with: {},
+                      },
+                )
+              }
             />
           )}
 
@@ -2154,7 +2254,9 @@ export function StepEditModal({
                     onChange={(c) => commit({ ...step, ...c })}
                     readOnly={readOnly}
                   />
-                  <StepPortsControl step={step} readOnly={readOnly} onChange={commit} />
+                  {SHOW_STEP_PORTS && (
+                    <StepPortsControl step={step} readOnly={readOnly} onChange={commit} />
+                  )}
                 </div>
               )}
             </>
@@ -2259,6 +2361,9 @@ export function StepEditModal({
 
 /** Default in-cardinality applied when a step is opted into multiple inbound edges. */
 const MULTI_IN_DEFAULT = 10;
+
+/** Hidden for now (26-08-30-00-fixes item 3). Flip to `true` to restore; nothing else changes. */
+const SHOW_STEP_PORTS = false;
 
 /**
  * Opt a step into accepting **multiple** incoming edges by setting `step.ports.in`
@@ -2395,8 +2500,8 @@ function WebhookUrlPanel({
 }
 
 /**
- * The Setup tab — the step's app (read-only), its action (a dropdown for app
- * steps), and its connection. Mirrors the top of a Zapier node.
+ * The Setup tab — one combined App+Connection field (D-1), then the step's
+ * action (a dropdown for app steps). Mirrors the top of a Zapier node.
  */
 function SetupTab({
   step,
@@ -2407,6 +2512,7 @@ function SetupTab({
   readOnly,
   onChangeAction,
   onChangeConnection,
+  onChangeApp,
 }: {
   step: FlowStep;
   app: AppSummary | undefined;
@@ -2416,25 +2522,105 @@ function SetupTab({
   readOnly?: boolean;
   onChangeAction: (action: string) => void;
   onChangeConnection: (connection: string | undefined) => void;
+  /** Fires with whatever app is picked in the Change flow, same or different —
+   *  D-1's "clear on a genuinely different app, no-op on the same app" decision
+   *  is the caller's (it already owns the equivalent decision for `onChangeAction`). */
+  onChangeApp: (appId: string) => void;
 }) {
+  const api = useW6WApi();
+  // Change (D-1) returns the combined field to a picking state; the collapsed
+  // display is reachable again — by picking a value — without remounting the
+  // modal (A3). Local, ephemeral UI state: the tab unmounts on tab-switch, so
+  // it always starts collapsed.
+  const [picking, setPicking] = useState(false);
+  const [pickerApps, setPickerApps] = useState<AppSummary[] | null>(null);
+
+  // D-P1: the app list comes from api.listApps(), fetched only once Change is
+  // clicked — AppsCtx is not exported and structurally ungateable here.
+  useEffect(() => {
+    if (!picking) return;
+    let canceled = false;
+    api
+      .listApps()
+      .then((list) => !canceled && setPickerApps(list))
+      .catch(() => !canceled && setPickerApps([]));
+    return () => {
+      canceled = true;
+    };
+  }, [api, picking]);
+
+  const connName = step.uses.connection
+    ? ((conns ?? []).find((c) => c.id === step.uses.connection)?.displayName ??
+      step.uses.connection)
+    : "No connection";
+
   return (
     <div className="w6w-stack">
       <div className="w6w-field">
         <span>App</span>
-        <div className="w6w-conn-label">
-          {!isInternal && app && (
-            <AppIcon
-              src={app.iconSvg}
-              srcDark={app.iconSvgDark}
-              brandColor={app.brandColor}
-              name={app.displayName}
-              size={20}
-            />
-          )}
-          <span className="w6w-conn-label-name">
-            {isInternal ? step.uses.app : (app?.displayName ?? step.uses.app)}
-          </span>
-        </div>
+        {!isInternal && picking ? (
+          <>
+            <select
+              aria-label="App"
+              value={step.uses.app}
+              disabled={readOnly}
+              onChange={(e) => {
+                onChangeApp(e.target.value);
+                setPicking(false);
+              }}
+            >
+              {pickerApps === null && <option value={step.uses.app}>{step.uses.app}</option>}
+              {(pickerApps ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.displayName}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Connection"
+              value={step.uses.connection ?? ""}
+              disabled={readOnly}
+              onChange={(e) => {
+                onChangeConnection(e.target.value || undefined);
+                setPicking(false);
+              }}
+            >
+              <option value="">— none —</option>
+              {(conns ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName || c.id}
+                  {c.state ? ` (${c.state})` : ""}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <div className="w6w-conn-label">
+            {!isInternal && app && (
+              <AppIcon
+                src={app.iconSvg}
+                srcDark={app.iconSvgDark}
+                brandColor={app.brandColor}
+                name={app.displayName}
+                size={20}
+              />
+            )}
+            <span className="w6w-conn-label-name">
+              {isInternal ? step.uses.app : (app?.displayName ?? step.uses.app)}
+              {!isInternal && ` · ${connName}`}
+            </span>
+            {!isInternal && (
+              <button
+                type="button"
+                className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                disabled={readOnly}
+                onClick={() => setPicking(true)}
+              >
+                Change
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isInternal ? (
@@ -2456,25 +2642,6 @@ function SetupTab({
             {(actions ?? []).map((a) => (
               <option key={a.key} value={a.key}>
                 {a.title ?? a.key}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {!isInternal && (
-        <label className="w6w-field">
-          <span>Connection</span>
-          <select
-            value={step.uses.connection ?? ""}
-            disabled={readOnly}
-            onChange={(e) => onChangeConnection(e.target.value || undefined)}
-          >
-            <option value="">— none —</option>
-            {(conns ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.displayName || c.id}
-                {c.state ? ` (${c.state})` : ""}
               </option>
             ))}
           </select>

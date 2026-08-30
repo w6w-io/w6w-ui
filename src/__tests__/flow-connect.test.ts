@@ -18,7 +18,12 @@ import {
   edgeWhenConflict,
   setEdgeWhen,
 } from "../flow-connect.ts";
-import type { NodePorts } from "../flow-types.ts";
+import {
+  ERROR_SOURCE_HANDLE,
+  type NodePorts,
+  laneForSourceHandle,
+  sourceHandleForLane,
+} from "../flow-types.ts";
 import { type StepNode, flowEdgeId } from "../flow-utils.ts";
 
 /** A canvas node for step `id`, optionally with persisted per-step ports. */
@@ -307,4 +312,60 @@ test("a DUPLICATE edge id is refused rather than rewriting both matching edges",
     ],
     "neither edge's endpoints or lane were touched",
   );
+});
+
+// ── T1.1.1. Lane derivation from the dragged handle, and the edge's anchor
+// following its lane through creation and re-lane. `laneForSourceHandle` /
+// `sourceHandleForLane` are the one canonicalisation point every minting site
+// (`onConnect`, `onConnectEnd` via `WorkflowFlowEditor.tsx`) reads off.
+
+test("U1 — laneForSourceHandle: exactly ERROR_SOURCE_HANDLE is 'error', everything else is 'success'", () => {
+  assert.equal(laneForSourceHandle(ERROR_SOURCE_HANDLE), "error");
+  assert.equal(laneForSourceHandle(undefined), "success");
+  assert.equal(laneForSourceHandle(null), "success");
+  // The near-miss id is not decoration: it kills a `startsWith`/`includes`
+  // widening, same mutation class as `isTriggerApp`'s own guard test.
+  assert.equal(laneForSourceHandle("out-error-x"), "success");
+});
+
+test("U2 — sourceHandleForLane: 'error' maps to the handle id, success/absent map to undefined (not falsy)", () => {
+  assert.equal(sourceHandleForLane("error"), ERROR_SOURCE_HANDLE);
+  // `=== undefined`, not falsy — an empty string is falsy too but is a REAL,
+  // if degenerate, handle id, and would break React Flow's default-handle
+  // anchoring for a success edge.
+  assert.equal(sourceHandleForLane("success"), undefined);
+  assert.equal(sourceHandleForLane(undefined), undefined);
+});
+
+test("U3 — applyConnect create-success: the minted edge carries no sourceHandle", () => {
+  const next = applyConnect("a", "b", ABCD, []);
+  assert.ok(next, "the connection must be allowed");
+  assert.equal(next[0].sourceHandle, undefined);
+});
+
+test("U4 — applyConnect create-error: the minted edge carries ERROR_SOURCE_HANDLE and data.when", () => {
+  // Routed through laneForSourceHandle rather than a hard-coded "error"
+  // literal — this is the same derivation `onConnect` performs off the
+  // dragged handle id, so this case also pins that laneForSourceHandle's
+  // output threads all the way through to the stamped edge.
+  const next = applyConnect("a", "b", ABCD, [], laneForSourceHandle(ERROR_SOURCE_HANDLE));
+  assert.ok(next, "the connection must be allowed");
+  // A stamp without the lane, or a lane without the stamp, is a real
+  // half-implementation — both are asserted in one case.
+  assert.equal(next[0].sourceHandle, ERROR_SOURCE_HANDLE);
+  assert.equal(next[0].data?.when, "error");
+});
+
+test("U5 — setEdgeWhen re-lanes the sourceHandle both ways on ONE edge object", () => {
+  const errored = setEdgeWhen([rf("a", "b", "success")], "a->b", "error", ABCD);
+  assert.ok(errored, "success→error re-lane must be allowed");
+  assert.equal(errored[0].sourceHandle, ERROR_SOURCE_HANDLE);
+
+  // The trap: a `{...edge}` spread would carry the handle id forward. Feeding
+  // the errored edge back through error→success must CLEAR it to `undefined` —
+  // asserted with `=== undefined`, not falsy, since a correct implementation
+  // fails only under that stricter check.
+  const backToSuccess = setEdgeWhen(errored, "a->b:error", "success", ABCD);
+  assert.ok(backToSuccess, "error→success re-lane must be allowed");
+  assert.equal(backToSuccess[0].sourceHandle, undefined);
 });
