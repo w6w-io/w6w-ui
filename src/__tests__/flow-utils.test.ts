@@ -19,6 +19,7 @@ import { connectConflict } from "../flow-connect.ts";
 // gate): T3.3.3 round 2 states its "both edges are on the success lane" precondition
 // from the REAL lane rule rather than by eye.
 import { edgeLane } from "../flow-connect.ts";
+import { ERROR_SOURCE_HANDLE } from "../flow-types.ts";
 import type { FlowWorkflow } from "../flow-types.ts";
 // Separate statement, same reason as the flow-utils.ts imports below: T2.1.1's
 // cases need FlowStep too, and widening the line above would read as a
@@ -102,6 +103,37 @@ test("round-trip — flowToWorkflow(workflowToFlow(wf)) reproduces the authored 
     ],
   };
   const { nodes, edges } = workflowToFlow(wf);
+  assert.deepEqual(flowToWorkflow(wf, nodes, edges).edges, wf.edges);
+});
+
+// ── T1.1.1. The load path stamps `sourceHandle` too, so a workflow saved
+// before the error port existed renders its error edges from the new port on
+// next open — not only edges drawn live after the feature shipped.
+
+test("U10 — workflowToFlow stamps sourceHandle from data.when: error gets the port id, plain edge gets undefined", () => {
+  const { edges } = workflowToFlow({
+    ...WF,
+    edges: [
+      { from: "a", to: "b", when: "error" },
+      { from: "b", to: "c" },
+    ],
+  });
+  // Both assertions in one case — asserting only the error edge passes a
+  // mutant that stamps EVERY edge with the handle id.
+  assert.equal(edges[0].sourceHandle, ERROR_SOURCE_HANDLE);
+  assert.equal(edges[1].sourceHandle, undefined);
+});
+
+test("U11 — the flowToWorkflow(workflowToFlow(wf)) round-trip does not leak sourceHandle into the persisted edge", () => {
+  const wf: FlowWorkflow = {
+    ...WF,
+    edges: [
+      { from: "a", to: "b", when: "error" },
+      { from: "b", to: "c" },
+    ],
+  };
+  const { nodes, edges } = workflowToFlow(wf);
+  assert.ok(edges[0].sourceHandle, "precondition: the loaded error edge does carry a sourceHandle");
   assert.deepEqual(flowToWorkflow(wf, nodes, edges).edges, wf.edges);
 });
 
