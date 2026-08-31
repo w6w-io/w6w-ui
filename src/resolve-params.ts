@@ -49,6 +49,29 @@ export interface ResolveScope {
   documents: Record<string, unknown>;
   steps: Record<string, { output?: unknown }>;
   trigger: { event?: unknown };
+  /**
+   * The original flat `sampleValues` map, keyed by full ref string — checked
+   * BEFORE the nested walk in {@link resolveRef}. `documentSampleValues`
+   * (`document-sources.ts`) emits a document field's sample as its OWN
+   * complete flat entry (`"documents.<key>.<field>"`), not as a nested value
+   * living under the shorter `"documents.<key>"` entry — so the one-hop strip
+   * below reconstructs `documents["<key>.<field>"]` (one key, a literal dot
+   * in it) instead of `documents["<key>"]["<field>"]`, and a real
+   * `"<key>"` entry (the whole document's raw content, a string) already
+   * occupies that slot besides. `walkPath`'s segment-by-segment walk can
+   * never reach either shape. An exact flat-key hit here resolves any ref
+   * `sampleValues` names directly, regardless of how many segments it has;
+   * the nested walk stays the fallback for a ref whose own reconstructed
+   * value happens to be an object (`vars.address` = `{ city: "X" }`, walking
+   * into it for `vars.address.city`), which is a value shape `sampleValues`
+   * never produces a matching flat key for in the first place.
+   *
+   * Optional: a `ResolveScope` built by hand (as most tests in
+   * `resolve-params.test.ts` do, to exercise the walk directly) has no flat
+   * map to check and falls straight through to `walkPath` — only
+   * `buildResolveScope` populates it.
+   */
+  flat?: Record<string, unknown>;
 }
 
 const VARS_PREFIX = "vars.";
@@ -85,6 +108,7 @@ export function buildResolveScope(
     documents,
     steps: (testStartState?.steps as Record<string, { output?: unknown }>) ?? {},
     trigger: testStartState?.trigger ?? {},
+    flat: sampleValues ?? {},
   };
 }
 
@@ -113,6 +137,16 @@ function walkPath(
 
 /** Resolve a single `var`/`$`-marker ref against the scope. */
 function resolveRef(ref: string, scope: ResolveScope): ResolvedSegment {
+  // A `vars.*`/`documents.*` ref that `sampleValues` already names directly
+  // (any number of segments) resolves exactly, before the nested walk below
+  // ever gets a chance to misreconstruct it — see `ResolveScope.flat`'s doc.
+  if (
+    scope.flat &&
+    (ref.startsWith(VARS_PREFIX) || ref.startsWith(DOCUMENTS_PREFIX)) &&
+    Object.hasOwn(scope.flat, ref)
+  ) {
+    return { status: "resolved", ref, value: scope.flat[ref] };
+  }
   const walked = walkPath(scope as unknown as Record<string, unknown>, ref);
   return walked.present
     ? { status: "resolved", ref, value: walked.value }

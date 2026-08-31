@@ -11,6 +11,7 @@ import {
   type FlowWorkflow,
   edgeVisuals,
   isInternalApp,
+  sourceHandleForLane,
 } from "./flow-types.ts";
 
 export interface StepNodeData extends Record<string, unknown> {
@@ -309,11 +310,18 @@ export function workflowToFlow(wf: FlowWorkflow): { nodes: StepNode[]; edges: Ed
     // an error edge between the same pair: two edges sharing one id would be
     // collapsed by React Flow's id-keyed store and one lane silently lost. The
     // qualifier comes from {@link flowEdgeId}, which every other id site calls.
+    //
+    // `sourceHandle` is stamped from {@link sourceHandleForLane} (T1.1.1) so a
+    // workflow saved before the error port existed renders its error edges from
+    // the new port on next open, not only edges drawn live after the feature
+    // shipped. `sourceHandle` is presentation only — `flowToWorkflow` never
+    // reads it back, so this does not touch the persisted `Edge.when` round-trip.
     const when = e.when ?? "success";
     return {
       id: flowEdgeId(e.from, e.to, when),
       source: e.from,
       target: e.to,
+      sourceHandle: sourceHandleForLane(when),
       animated: false,
       data: { when },
       ...edgeVisuals(when),
@@ -540,6 +548,52 @@ function implicitChain(steps: FlowStep[]): FlowEdge[] {
   const out: FlowEdge[] = [];
   for (let i = 0; i < steps.length - 1; i++) out.push({ from: steps[i].id, to: steps[i + 1].id });
   return out;
+}
+
+/**
+ * Turn a human-readable label (an action's `label`/`displayName`) into an
+ * id-safe slug for {@link suggestStepId}'s `prefix` — human override,
+ * 2026-08-30: a step id derived from its OWN action ("data_1",
+ * "render_template_1", "manual_trigger_1") orients a reader who never
+ * renamed it, unlike the generic "gate_1"/"step_1" every internal/external
+ * step used to get regardless of what it actually does. Lowercase,
+ * underscore-separated, ASCII word characters only; falls back to `"step"`
+ * for a label that slugifies to nothing (empty, or entirely punctuation).
+ */
+export function slugifyLabel(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || "step";
+}
+
+/**
+ * The current chain's ROOT: the earliest-added node (array/declaration order)
+ * with no incoming edge. `undefined` for an empty graph. Used to give a
+ * newly-added TRIGGER a sensible default wire — human override, 2026-08-30 —
+ * rather than always landing as a floating node. Array order (not position)
+ * is the tie-break because it is deterministic and matches "the node that
+ * was here first," not wherever the canvas happens to have placed it.
+ */
+export function findChainRoot(nodes: StepNode[], edges: Edge[]): StepNode | undefined {
+  const hasIncoming = new Set(edges.map((e) => e.target));
+  return nodes.find((n) => !hasIncoming.has(n.id));
+}
+
+/**
+ * The current chain's TAIL: the most-recently-added node (array/declaration
+ * order) with no outgoing edge. `undefined` for an empty graph. Used to give
+ * a newly-added non-trigger STEP a sensible default wire — the most recently
+ * placed branch is the one a user adding steps one at a time is most likely
+ * extending.
+ */
+export function findChainTail(nodes: StepNode[], edges: Edge[]): StepNode | undefined {
+  const hasOutgoing = new Set(edges.map((e) => e.source));
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    if (!hasOutgoing.has(nodes[i].id)) return nodes[i];
+  }
+  return undefined;
 }
 
 /** Suggest a unique step id given the current graph. */

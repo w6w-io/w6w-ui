@@ -47,6 +47,62 @@
   fill: var(--w6w-panel);
 }
 
+/* A step's own Notes, shown under its canvas card — human override,
+   2026-08-30, so a description written once (settings → gear icon) is
+   visible without opening the step. One line, clipped with an ellipsis (the
+   full text is still on the node's `title=` for a hover); `max-width`
+   matches the card's own `minWidth` so a short note never forces the row
+   wider than the card sitting above it. Font size matches the sibling
+   meta-line's own inline fontSize:10 (not scanned by this ratchet) directly
+   above it — the smallest declared token, --w6w-fs-xs, is 12px and would
+   visibly mismatch the two lines. */
+.w6w-flow .w6w-node-notes {
+  margin-top: var(--w6w-sp-0-5);
+  padding-left: var(--w6w-sp-0-5);
+  /* lint-tokens-allow: matches the sibling meta-line's inline fontSize:10 above it */
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.75;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The ordinary (success) ports — bumped from the library's own 6px default
+   (2026-08-30: "ports must have consistent size") to match the error port
+   below exactly. `:not(.w6w-handle-multi)`: the multi-input handle is its
+   own taller pill shape (`PortHandle`'s inline style), not a dot — this
+   rule must not touch it. */
+.w6w-flow .react-flow__handle:not(.w6w-handle-multi) {
+  width: 8px;
+  height: 8px;
+}
+
+/* The error exit port — a step/control node's second SOURCE handle (T1.1.1),
+   rendered below the ordinary exit via the shared PortHandle component
+   (`id={ERROR_SOURCE_HANDLE}`, `variant="error"`). Danger-tinted, same
+   --w6w-danger token as .w6w-edge-error above (never a hard-coded hex).
+   DELIBERATELY 1px SMALLER, in actual box size, than the ordinary ports
+   above (2026-08-30, second pass on "consistent size"): setting both to the
+   literal same 8px×8px box (the first pass) still read as bigger — measured
+   directly, computed styles for both were byte-identical (same width,
+   height, border-width, box-sizing, no box-shadow/outline difference) — a
+   saturated warm fill on a light canvas background perceptually "expands"
+   past a same-sized dark/cool one (the classic irradiation illusion), so
+   matching PIXELS does not produce matching APPEARANCE. Compensating with a
+   smaller literal box is what actually reads as equal. */
+.w6w-flow .react-flow__handle.w6w-handle-error {
+  width: 7px;
+  height: 7px;
+  background: var(--w6w-danger);
+  border-color: var(--w6w-danger);
+  opacity: 0.85;
+}
+.w6w-flow .react-flow__handle.w6w-handle-error:hover {
+  opacity: 1;
+}
+
 /* Workflow edges: highlight the selected/focused edge in the accent colour and
    thicken it, so it's obvious which one Backspace/Delete will remove. The wide,
    invisible interaction path keeps the click target generous. */

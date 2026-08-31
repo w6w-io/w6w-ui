@@ -39,6 +39,72 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A pseudo-field wrapper (border/background, like every other field in this
+   form) CONTAINING two real buttons, spaced apart — `[App] <--> [Connection]`
+   (2026-08-30, fifth pass: "still missing border around SendGrid + prod...
+   look like before, where both were inside a pseudo field, only change was
+   to make the buttons look like buttons"). The outer border is back; each
+   button ALSO keeps its own border/background (one shade lighter,
+   `--w6w-panel` against the field's `--w6w-panel-2`) so it still reads as a
+   clickable button, not merely text, without the two touching directly —
+   the field's own padding is the gap between its edge and each button. */
+.w6w-app-conn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--w6w-sp-2);
+  background: var(--w6w-panel-2);
+  border: 1px solid var(--w6w-border);
+  border-radius: 8px;
+  min-height: 36px;
+  padding: var(--w6w-sp-1);
+}
+.w6w-app-conn-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--w6w-sp-2);
+  background: var(--w6w-panel);
+  border: 1px solid var(--w6w-border);
+  border-radius: 6px;
+  padding: var(--w6w-sp-1) var(--w6w-sp-2-5);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--w6w-text);
+}
+.w6w-app-conn-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.w6w-app-conn-btn:hover:not(:disabled),
+.w6w-app-conn-btn[aria-expanded="true"] {
+  border-color: var(--w6w-accent);
+}
+
+/* A flyout popover (App/Connection pickers) — portaled to the enclosing
+   `<dialog>` so it floats OVER the modal's own scrollable body instead of
+   being clipped/squeezed inside it (`Flyout` component doc has the why).
+   Plain positioned div, not a nested native dialog. No max-height/overflow
+   of its own: `AppPicker` already caps and scrolls itself
+   (`.w6w-apppicker-host`, `min(70vh, 520px)`), and the plain connection
+   list is short enough in practice to size to content — a SECOND scroll
+   container nested inside this one would double-scroll `AppPicker`. */
+.w6w-flyout {
+  position: fixed;
+  z-index: 40;
+  /* No `box-sizing: border-box` reset elsewhere in this package (checked) —
+     the inline `width` set by `Flyout` is meant to match the anchor row
+     EXACTLY (2026-08-30: "should extend to the end of the prod button and
+     div"), so padding/border must come out of that width, not add to it. */
+  box-sizing: border-box;
+  background: var(--w6w-panel);
+  border: 1px solid var(--w6w-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: var(--w6w-sp-2);
+}
 .w6w-btn-sm {
   padding: var(--w6w-sp-1) var(--w6w-sp-2);
   font-size: var(--w6w-fs-xs);

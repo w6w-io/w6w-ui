@@ -218,6 +218,60 @@ test("buildResolveScope — vars/documents rebuilt from the flat sampleValues ma
   assert.deepStrictEqual(scope.steps, {});
 });
 
+test("buildResolveScope — a document FIELD-level sample (documents.<key>.<field>) resolves, not 'unresolved'", () => {
+  // Reproduces a real, user-hit bug: `documentSampleValues` emits
+  // "documents.<key>.<field>" as its OWN flat entry (not nested under
+  // "documents.<key>"), which the one-hop prefix-strip below turns into a
+  // single literal key "confirmation-email.subject" holding the field value —
+  // while "confirmation-email" ALSO exists as a separate key holding the raw
+  // content string. `walkPath`'s segment-by-segment walk for
+  // "documents.confirmation-email.subject" hops into that raw STRING at
+  // "confirmation-email" and can go no further, reporting "unresolved" for a
+  // value that plainly exists.
+  const scope = buildResolveScope(
+    {
+      "documents.confirmation-email": 'subject: "Your order is confirmed"\nbody: |\n  Hi...',
+      "documents.confirmation-email.subject": "Your order is confirmed",
+      "documents.confirmation-email.body": "Hi {{customer_name}}, ...",
+    },
+    undefined,
+  );
+  const seg = resolveParamValue(
+    { type: "expr", parts: [{ kind: "var", ref: "documents.confirmation-email.subject" }] },
+    scope,
+  );
+  assert.deepStrictEqual(seg, [
+    {
+      status: "resolved",
+      ref: "documents.confirmation-email.subject",
+      value: "Your order is confirmed",
+    },
+  ]);
+  const bodySeg = resolveParamValue(
+    { type: "expr", parts: [{ kind: "var", ref: "documents.confirmation-email.body" }] },
+    scope,
+  );
+  assert.deepStrictEqual(bodySeg, [
+    {
+      status: "resolved",
+      ref: "documents.confirmation-email.body",
+      value: "Hi {{customer_name}}, ...",
+    },
+  ]);
+  // The bare whole-document ref still resolves too — the fix must not break it.
+  const bareSeg = resolveParamValue(
+    { type: "expr", parts: [{ kind: "var", ref: "documents.confirmation-email" }] },
+    scope,
+  );
+  assert.deepStrictEqual(bareSeg, [
+    {
+      status: "resolved",
+      ref: "documents.confirmation-email",
+      value: 'subject: "Your order is confirmed"\nbody: |\n  Hi...',
+    },
+  ]);
+});
+
 test("buildResolveScope — a var/document holding an object still dot-walks past the reconstructed hop", () => {
   const scope = buildResolveScope({ "vars.address": { city: "NYC" } }, undefined);
   const seg = resolveParamValue(
