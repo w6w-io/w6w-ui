@@ -211,9 +211,12 @@ export function CodeBlock(props: CodeBlockProps) {
                   const cls = `w6w-code-line ${lineProps.className ?? ""}`;
                   const lineKey = `L${offset}`;
                   let col = offset;
-                  const spans = line.map((token) => {
+                  const spans = line.map((token, tokenIndex) => {
                     const tokenProps = getTokenProps({ token });
-                    const key = `T${col}`;
+                    // `tokenIndex` tiebreaks tokens that share an offset (e.g. a
+                    // zero-length token Prism can emit) — offset alone isn't
+                    // guaranteed unique within a line.
+                    const key = `T${col}-${tokenIndex}`;
                     col += token.content.length;
                     return <span {...tokenProps} key={key} />;
                   });
