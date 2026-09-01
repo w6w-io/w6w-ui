@@ -65,17 +65,27 @@
    read-only display, never an editable `.w6w-field`, so it earns its own
    compact key-left/value-right layout instead of a label-above-control block
    (human report, 2026-09-01: key and value were indistinguishable and every
-   row burned a full stacked block of vertical space). */
-.w6w-resolved-row {
+   row burned a full stacked block of vertical space). ONE grid across the
+   whole list (`.w6w-resolved-table`), not one grid per row, so every row's
+   key column lines up with the one above and below it. */
+.w6w-resolved-table {
   display: grid;
-  grid-template-columns: minmax(auto, 40%) 1fr;
-  column-gap: var(--w6w-sp-3);
+  grid-template-columns: auto 1fr;
   align-items: baseline;
+  column-gap: var(--w6w-sp-3);
+}
+/* Each row is `display: contents` — it renders no box of its own, so its two
+   children (label, value) become direct items of the parent grid above,
+   sharing its column tracks instead of sizing their own. */
+.w6w-resolved-row {
+  display: contents;
+  font-size: calc(var(--w6w-fs-sm) * 0.9);
+}
+.w6w-resolved-row > * {
   padding: var(--w6w-sp-1-5) 0;
   border-bottom: 1px solid var(--w6w-border);
-  font-size: var(--w6w-fs-sm);
 }
-.w6w-resolved-row:last-child {
+.w6w-resolved-row:last-child > * {
   border-bottom: none;
 }
 .w6w-resolved-label {

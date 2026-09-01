@@ -112,9 +112,11 @@ export function ResolvedParams({
   }
 
   return (
-    // A dedicated wrapper class — not just `.w6w-stack` — so a host/test can
-    // scope to exactly this row list.
-    <div className="w6w-resolved-params w6w-stack">
+    // `.w6w-resolved-table` is the ONE grid this whole row list shares — each
+    // `.w6w-resolved-row` below is `display: contents` and contributes its
+    // two children straight into these column tracks, so every row's key
+    // column lines up with every other row's.
+    <div className="w6w-resolved-params w6w-resolved-table">
       {rows.map((param) =>
         param.type === "vars" ? (
           <ResolvedVarsRow key={param.key} param={param} value={values[param.key]} scope={scope} />
