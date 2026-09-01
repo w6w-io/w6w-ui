@@ -980,6 +980,7 @@ export function ControlStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Step JSON"
+              copyable
             />
           ) : configView === "params-code" ? (
             <JsonEditor
@@ -988,6 +989,7 @@ export function ControlStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Parameters JSON"
+              copyable
               onValidChange={(p) =>
                 p &&
                 typeof p === "object" &&
@@ -2360,6 +2362,7 @@ export function AppStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Step JSON"
+              copyable
             />
           ) : configView === "params-code" ? (
             <JsonEditor
@@ -2368,6 +2371,7 @@ export function AppStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Parameters JSON"
+              copyable
               onValidChange={(p) =>
                 p &&
                 typeof p === "object" &&
