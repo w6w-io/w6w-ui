@@ -184,3 +184,33 @@ test("U9 — ControlNodeCard renders a <PortHandle> carrying id={ERROR_SOURCE_HA
     "ControlNodeCard must render the error exit port via the shared PortHandle component",
   );
 });
+
+test("U10 — ControlNodeCard gates that error port behind a trigger check", () => {
+  // A trigger is the run's entry, not a step that acts: it has no failure of
+  // its own to route, so the error exit port must not render on its card
+  // (human report, 2026-09-01). ControlNodeCard is the only card that can be a
+  // trigger — an app's own trigger binds as a subscription, never as a node —
+  // so the guard belongs here and nowhere else.
+  const fn = findFunction("ControlNodeCard");
+  const body = fn.getText(sf);
+  assert.match(
+    body,
+    /isTriggerApp\(step\.uses\.app\)/,
+    "ControlNodeCard must derive a trigger check from isTriggerApp",
+  );
+  // The error PortHandle's JSX must sit inside a `!isTrigger &&` guard.
+  let guarded = false;
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isJsxExpression(node) &&
+      ts.isBinaryExpression(node.expression ?? ({} as ts.Expression)) &&
+      /^!isTrigger$/.test((node.expression as ts.BinaryExpression).left.getText(sf)) &&
+      /ERROR_SOURCE_HANDLE/.test((node.expression as ts.BinaryExpression).right.getText(sf))
+    ) {
+      guarded = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(fn, visit);
+  assert.ok(guarded, "the error PortHandle must render only when `!isTrigger`");
+});

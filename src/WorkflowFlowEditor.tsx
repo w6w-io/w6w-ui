@@ -1904,6 +1904,13 @@ function ControlNodeCard({ id, data, selected }: NodeProps<StepNode>) {
   // Per-step ports (T2.3.1): triggers have no entry (0 in, 1 out); a fan-in node
   // (e.g. aggregate, or `ports.in > 1`) renders a multi-input handle.
   const ports = nodePortsForStep(step);
+  // A trigger is the run's ENTRY, not a step that acts: it emits the start
+  // payload and has no vendor call to fail, so there is no failure of its own
+  // to route — no error exit port (human report, 2026-09-01). Triggers on the
+  // canvas are always internal nodes (an app's own trigger binds as a
+  // subscription, never as a node), so this card is the only one that needs
+  // the guard.
+  const isTrigger = isTriggerApp(step.uses.app);
   return (
     <div>
       {/* Compute/trigger nodes can be test-run; flow-control nodes cannot. */}
@@ -1938,13 +1945,15 @@ function ControlNodeCard({ id, data, selected }: NodeProps<StepNode>) {
         {ports.out > 0 && (
           <>
             <PortHandle type="source" position={Position.Right} multiple={ports.out > 1} />
-            <PortHandle
-              type="source"
-              position={Position.Bottom}
-              multiple={false}
-              id={ERROR_SOURCE_HANDLE}
-              variant="error"
-            />
+            {!isTrigger && (
+              <PortHandle
+                type="source"
+                position={Position.Bottom}
+                multiple={false}
+                id={ERROR_SOURCE_HANDLE}
+                variant="error"
+              />
+            )}
           </>
         )}
       </div>
@@ -2321,6 +2330,9 @@ export function StepEditModal({
                     config={{ retry: step.retry, onError: step.onError, notes: step.notes }}
                     onChange={(c) => commit({ ...step, ...c })}
                     readOnly={readOnly}
+                    // A trigger has no failure of its own to retry or police —
+                    // same reason its card renders no error exit port.
+                    failureHandling={!isTrigger}
                   />
                   {SHOW_STEP_PORTS && (
                     <StepPortsControl step={step} readOnly={readOnly} onChange={commit} />

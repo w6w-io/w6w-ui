@@ -451,3 +451,46 @@
   font-size: 0.85em;
   font-style: italic;
 }
+
+/* One resolved row's value. `anywhere` (not `break-word`) because these values
+   are markup and URLs as often as prose: a single unbroken 40kB attribute
+   string would otherwise force the whole modal to scroll sideways. */
+.w6w-resolved-value {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* The expanded form of a clipped value (`resolved-clip.ts`). A block with its
+   own scroll, so "Show all" can never restore the unbounded inline paste that
+   buried the other params and the run's result. */
+.w6w-resolved-text-full {
+  display: block;
+  margin: var(--w6w-sp-1) 0;
+  max-height: 14em;
+  overflow: auto;
+  padding: var(--w6w-sp-2);
+  background: var(--w6w-panel-2);
+  border: 1px solid var(--w6w-border);
+  border-radius: var(--w6w-radius);
+  font-family: var(--w6w-font-mono);
+  font-size: 0.85em; /* lint-tokens-allow: matches the sibling code-typography rules above in this same file */
+  line-height: var(--w6w-lh-normal);
+  white-space: pre-wrap;
+}
+
+/* Link-weight toggle — this sits inside a value, so it must not read as a
+   second action competing with the modal's own buttons. */
+.w6w-resolved-more {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: var(--w6w-sp-2);
+  color: var(--w6w-accent);
+  font-size: 0.85em; /* lint-tokens-allow: matches the sibling code-typography rules above in this same file */
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.w6w-resolved-more:hover {
+  text-decoration: underline;
+}
