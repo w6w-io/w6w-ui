@@ -3214,10 +3214,36 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   font-style: italic;
 }
 
+/* One resolved param: a table row, not a stacked form field — this list is
+   read-only display, never an editable `.w6w-field`, so it earns its own
+   compact key-left/value-right layout instead of a label-above-control block
+   (human report, 2026-09-01: key and value were indistinguishable and every
+   row burned a full stacked block of vertical space). */
+.w6w-resolved-row {
+  display: grid;
+  grid-template-columns: minmax(auto, 40%) 1fr;
+  column-gap: var(--w6w-sp-3);
+  align-items: baseline;
+  padding: var(--w6w-sp-1-5) 0;
+  border-bottom: 1px solid var(--w6w-border);
+  font-size: var(--w6w-fs-sm);
+}
+
+.w6w-resolved-row:last-child {
+  border-bottom: none;
+}
+
+.w6w-resolved-label {
+  color: var(--w6w-muted);
+}
+
 /* One resolved row's value. `anywhere` (not `break-word`) because these values
    are markup and URLs as often as prose: a single unbroken 40kB attribute
-   string would otherwise force the whole modal to scroll sideways. */
+   string would otherwise force the whole modal to scroll sideways. Full-
+   strength text color (not `--w6w-muted`) so it reads as the actual content,
+   distinct from the label beside it. */
 .w6w-resolved-value {
+  color: var(--w6w-text);
   overflow-wrap: anywhere;
   min-width: 0;
 }

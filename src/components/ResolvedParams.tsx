@@ -113,9 +113,7 @@ export function ResolvedParams({
 
   return (
     // A dedicated wrapper class — not just `.w6w-stack` — so a host/test can
-    // scope to exactly these rows: `IncomingStateField` above also renders a
-    // top-level `.w6w-field` (its own container class), which a bare
-    // `.w6w-field` query would otherwise pick up too.
+    // scope to exactly this row list.
     <div className="w6w-resolved-params w6w-stack">
       {rows.map((param) =>
         param.type === "vars" ? (
@@ -168,8 +166,8 @@ function buildResolvedJson(
 
 function ResolvedParamRow({ label, segments }: { label: string; segments: ResolvedSegment[] }) {
   return (
-    <div className="w6w-field">
-      <span>{label}</span>
+    <div className="w6w-resolved-row">
+      <span className="w6w-resolved-label">{label}</span>
       <div className="w6w-resolved-value">
         <ResolvedSegments segments={segments} />
       </div>
@@ -193,8 +191,8 @@ function ResolvedVarsRow({
       ? (param.default as DataVar[])
       : [];
   return (
-    <div className="w6w-field">
-      <span>{param.label ?? param.key}</span>
+    <div className="w6w-resolved-row">
+      <span className="w6w-resolved-label">{param.label ?? param.key}</span>
       {rows.length === 0 ? (
         <p className="w6w-muted w6w-small">None configured.</p>
       ) : (
