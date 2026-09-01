@@ -104,15 +104,21 @@ test("J1 — copyable renders exactly one button, no .w6w-copyable wrapper, and 
   });
   await settle();
 
+  // Checked BEFORE the button count, on purpose: this is the assertion a
+  // shape-(a) regression (wrapping <JsonEditor> in <Copyable> instead of an
+  // internal button) fails, and it must be the one that actually runs red —
+  // not shadowed by the button-count assertion below, which a shape-(a) tree
+  // would also fail (its button lands outside `.w6w-json-editor` entirely),
+  // but for the wrong reason.
+  assert.equal(
+    container.querySelector(".w6w-copyable"),
+    null,
+    "no .w6w-copyable element anywhere — this is shape (b), not shape (a)",
+  );
   const editor = container.querySelector(".w6w-json-editor");
   assert.ok(editor, "the editor wrapper must render");
   const buttons = editor.querySelectorAll("button");
   assert.equal(buttons.length, 1, "exactly one button inside .w6w-json-editor");
-  assert.equal(
-    container.querySelector(".w6w-copyable"),
-    null,
-    "no .w6w-copyable element anywhere — this is shape (b), and it is the assertion a shape-(a) regression fails",
-  );
 
   await act(async () => {
     buttons[0].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
