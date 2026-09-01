@@ -3,6 +3,8 @@ import { lintGutter, linter } from "@codemirror/lint";
 import { EditorView } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
 import { useMemo } from "react";
+import { CheckGlyph, CopyGlyph } from "./components/Copyable.tsx";
+import { useCopyToClipboard } from "./components/use-copy.ts";
 import { useEffectiveTheme } from "./theme.ts";
 import type { ThemeMode } from "./types.ts";
 
@@ -43,6 +45,17 @@ export interface JsonEditorProps {
 
   /** Accessible label for the editor. */
   "aria-label"?: string;
+
+  /**
+   * Render an in-box copy-to-clipboard button, a direct child of this
+   * component's own `.w6w-json-editor` wrapper (sibling to the CodeMirror
+   * mount — no extra DOM node). Copies the current `value` verbatim.
+   *
+   * Off by default: the other five `<JsonEditor>` mounts in this tree are
+   * not step-JSON config views and must render byte-identically to before
+   * this prop existed.
+   */
+  copyable?: boolean;
 }
 
 /**
@@ -58,6 +71,10 @@ export interface JsonEditorProps {
  */
 export function JsonEditor(props: JsonEditorProps) {
   const theme = useEffectiveTheme(props.theme);
+  // Only mounted when `copyable` is on, but the hook itself must run
+  // unconditionally (Rules of Hooks) — it is inert (no button, no listener)
+  // until `copy()` is actually invoked from the button below.
+  const { copied, copy } = useCopyToClipboard(props.value);
   const extensions = useMemo(
     () => [
       json(),
@@ -129,6 +146,24 @@ export function JsonEditor(props: JsonEditorProps) {
           closeBrackets: true,
         }}
       />
+      {props.copyable && (
+        <>
+          <button
+            type="button"
+            className={`w6w-icon-btn w6w-copyable-btn${copied ? " is-copied" : ""}`}
+            aria-label="Copy"
+            onClick={() => void copy()}
+          >
+            {copied ? <CheckGlyph /> : <CopyGlyph />}
+          </button>
+          {/* Same live-region convention as `Copyable.tsx:141-147`: the
+              button's accessible name stays constant, so this announces the
+              result. */}
+          <span className="w6w-copyable-status" aria-live="polite">
+            {copied ? "Copied" : ""}
+          </span>
+        </>
+      )}
     </div>
   );
 }

@@ -2299,6 +2299,7 @@ export function StepEditModal({
                   minHeight="260px"
                   height="100%"
                   aria-label={`Step ${step.id} JSON`}
+                  copyable
                 />
               ) : configView === "params-code" ? (
                 <JsonEditor
@@ -2308,6 +2309,7 @@ export function StepEditModal({
                   minHeight="260px"
                   height="100%"
                   aria-label={`Step ${step.id} params JSON`}
+                  copyable
                   onValidChange={(p) =>
                     p &&
                     typeof p === "object" &&
