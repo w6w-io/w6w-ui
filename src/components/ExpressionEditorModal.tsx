@@ -1,5 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ExprPart, ExprValue, SecretValue } from "../types.ts";
+import { Copyable } from "./Copyable.tsx";
 import type { ExpressionOptions } from "./ExpressionOptions.tsx";
 import { Modal } from "./Modal.tsx";
 import {
@@ -76,6 +77,18 @@ export function ExpressionEditorModal({
   // whether the host supplied the matching callback (`options.createVar` /
   // `.createSecret`) — see the rail below.
   const [adding, setAdding] = useState<"var" | "secret" | null>(null);
+  // Rail sources with surviving child rows (a multi-field document, a step
+  // with declared outputs) collapse by default — ONE mechanism, composite
+  // keys ("doc:<key>" / "step:<id>"), serving both loops below.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleExpanded = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: paint on `paintGen`, not on every `parts` change; edits otherwise flow through the DOM.
   useLayoutEffect(() => {
@@ -254,6 +267,93 @@ export function ExpressionEditorModal({
       <div className="w6w-exprmodal">
         {/* Left: the data sources in scope. */}
         <aside className="w6w-exprmodal-sources">
+          {/* First slot — context-specific, mutually exclusive in the real
+              wiring (a Function supplies `inputs` and never `steps`; the flow
+              editor supplies `steps`/`hasTrigger` and never `inputs`). Render
+              Workflow state first should a host ever supply both. */}
+          {hasState && (
+            <div className="w6w-exprmodal-group">
+              <span className="w6w-exprmodal-group-label">Workflow state</span>
+              {options.hasTrigger &&
+                source(
+                  "trigger.event",
+                  { kind: "var", ref: "trigger.event" },
+                  "w6w-expr-chip-var",
+                  "⚡",
+                )}
+              {steps.map((st) => {
+                // Only keys that can become a ref the ENGINE resolves are
+                // offered. The guard lives here, at the one place a ref is
+                // built, so it holds for any host that supplies `steps` —
+                // not only for the flow editor's own projection.
+                const fields = (st.outputs ?? []).filter((o) => isRefSafeKey(o.key));
+                const stepKey = `step:${st.id}`;
+                const isOpen = expanded.has(stepKey);
+                // The whole output — still a real, useful ref on its own, and
+                // the author's route to a key the guard dropped. Its class,
+                // label, sigil and inserted ref are unchanged from before.
+                const wholeBtn = source(
+                  st.label ?? st.id,
+                  { kind: "var", ref: `steps.${st.id}.output` },
+                  "w6w-expr-chip-var",
+                  "▸",
+                );
+                return (
+                  <Fragment key={st.id}>
+                    {fields.length > 0 ? (
+                      <div className="w6w-exprmodal-source-row">
+                        {wholeBtn}
+                        <button
+                          type="button"
+                          className="w6w-exprmodal-toggle-btn"
+                          data-testid="expr-toggle-fields"
+                          aria-expanded={isOpen}
+                          aria-label="Toggle fields"
+                          title="Toggle fields"
+                          onClick={() => toggleExpanded(stepKey)}
+                        >
+                          {isOpen ? "⌄" : "›"}
+                        </button>
+                      </div>
+                    ) : (
+                      wholeBtn
+                    )}
+                    {/* …and one source per DECLARED output field, nested under
+                        it, collapsed until the toggle above is expanded. Each
+                        SAVES the canonical `steps.<id>.output.<key>` (the only
+                        form the engine resolves) and SHOWS `varLabel(ref)`,
+                        i.e. the short `<id>.<key>`. The key goes into the ref
+                        VERBATIM — `o.label` is display data and must never be
+                        substituted into a ref. */}
+                    {fields.length > 0 && isOpen && (
+                      <div className="w6w-exprmodal-subsources">
+                        {fields.map((o) => {
+                          const ref = `steps.${st.id}.output.${o.key}`;
+                          return source(
+                            varLabel(ref),
+                            { kind: "var", ref },
+                            "w6w-expr-chip-var",
+                            "·",
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </div>
+          )}
+
+          {options.inputs !== undefined && (
+            <div className="w6w-exprmodal-group">
+              <span className="w6w-exprmodal-group-label">Inputs</span>
+              {inputs.length === 0 && <span className="w6w-expr-menu-empty">No inputs</span>}
+              {inputs.map((i) =>
+                source(i, { kind: "var", ref: `inputs.${i}` }, "w6w-expr-chip-var", "⇥"),
+              )}
+            </div>
+          )}
+
           <div className="w6w-exprmodal-group">
             <div className="w6w-field-labelrow">
               <span className="w6w-exprmodal-group-label">Variables</span>
@@ -275,34 +375,6 @@ export function ExpressionEditorModal({
           </div>
 
           <div className="w6w-exprmodal-group">
-            <div className="w6w-field-labelrow">
-              <span className="w6w-exprmodal-group-label">Secrets</span>
-              {options.createSecret && (
-                <button
-                  type="button"
-                  className="w6w-btn w6w-btn-ghost w6w-btn-sm"
-                  data-testid="expr-add-secret"
-                  onClick={() => setAdding("secret")}
-                >
-                  + Add
-                </button>
-              )}
-            </div>
-            {secrets.length === 0 && <span className="w6w-expr-menu-empty">No secrets</span>}
-            {secrets.map((s) =>
-              source(s, { kind: "secret", ref: s }, "w6w-expr-chip-secret", "🔒"),
-            )}
-          </div>
-
-          <div className="w6w-exprmodal-group">
-            <span className="w6w-exprmodal-group-label">Inputs</span>
-            {inputs.length === 0 && <span className="w6w-expr-menu-empty">No inputs</span>}
-            {inputs.map((i) =>
-              source(i, { kind: "var", ref: `inputs.${i}` }, "w6w-expr-chip-var", "⇥"),
-            )}
-          </div>
-
-          <div className="w6w-exprmodal-group">
             <span className="w6w-exprmodal-group-label">Documents</span>
             {documents.length === 0 && <span className="w6w-expr-menu-empty">No documents</span>}
             {documents.map((d) => {
@@ -310,26 +382,48 @@ export function ExpressionEditorModal({
               // enumerated raw at the source (studio's `document-sources.ts`),
               // filtered exactly once, here, where the ref is built (A3, A4a).
               const fields = (d.fields ?? []).filter((f) => isRefSafeKey(f.key));
+              const docKey = `doc:${d.key}`;
+              const isOpen = expanded.has(docKey);
+              // The whole document — unconditional, for every format, exactly
+              // as before (A2). Its class, label, sigil and inserted ref are
+              // unchanged from before.
+              const wholeBtn = source(
+                d.key,
+                { kind: "var", ref: `documents.${d.key}` },
+                "w6w-expr-chip-var",
+                "▦",
+              );
               return (
                 <Fragment key={d.key}>
-                  {/* The whole document — unconditional, for every format,
-                      exactly as before (A2). */}
-                  {source(
-                    d.key,
-                    { kind: "var", ref: `documents.${d.key}` },
-                    "w6w-expr-chip-var",
-                    "▦",
+                  {fields.length > 0 ? (
+                    <div className="w6w-exprmodal-source-row">
+                      {wholeBtn}
+                      <button
+                        type="button"
+                        className="w6w-exprmodal-toggle-btn"
+                        data-testid="expr-toggle-fields"
+                        aria-expanded={isOpen}
+                        aria-label="Toggle fields"
+                        title="Toggle fields"
+                        onClick={() => toggleExpanded(docKey)}
+                      >
+                        {isOpen ? "⌄" : "›"}
+                      </button>
+                    </div>
+                  ) : (
+                    wholeBtn
                   )}
                   {/* …and one source per surviving top-level field, nested
-                      under it. The label is the field key itself — the parent
-                      row above already shows `d.key` — never `varLabel(ref)`,
-                      which would spell out the whole dotted ref again. Each
-                      row additionally carries a SECOND, visible action (D-P1)
+                      under it, collapsed until the toggle above is expanded.
+                      The label is the field key itself — the parent row above
+                      already shows `d.key` — never `varLabel(ref)`, which
+                      would spell out the whole dotted ref again. Each row
+                      additionally carries a SECOND, visible action (D-P1)
                       that inserts the SAME ref as a `render` part, so the
-                      placeholder-substitution behaviour is discoverable at the
-                      moment of insertion — not only via the chip's own
+                      placeholder-substitution behaviour is discoverable at
+                      the moment of insertion — not only via the chip's own
                       post-insertion ⇄ toggle. */}
-                  {fields.length > 0 && (
+                  {fields.length > 0 && isOpen && (
                     <div className="w6w-exprmodal-subsources">
                       {fields.map((f) => {
                         const ref = `documents.${d.key}.${f.key}`;
@@ -356,56 +450,25 @@ export function ExpressionEditorModal({
             })}
           </div>
 
-          {hasState && (
-            <div className="w6w-exprmodal-group">
-              <span className="w6w-exprmodal-group-label">Workflow state</span>
-              {options.hasTrigger &&
-                source(
-                  "trigger.event",
-                  { kind: "var", ref: "trigger.event" },
-                  "w6w-expr-chip-var",
-                  "⚡",
-                )}
-              {steps.map((st) => {
-                // Only keys that can become a ref the ENGINE resolves are
-                // offered. The guard lives here, at the one place a ref is
-                // built, so it holds for any host that supplies `steps` —
-                // not only for the flow editor's own projection.
-                const fields = (st.outputs ?? []).filter((o) => isRefSafeKey(o.key));
-                return (
-                  <Fragment key={st.id}>
-                    {/* The whole output — still a real, useful ref on its own,
-                        and the author's route to a key the guard dropped. */}
-                    {source(
-                      st.label ?? st.id,
-                      { kind: "var", ref: `steps.${st.id}.output` },
-                      "w6w-expr-chip-var",
-                      "▸",
-                    )}
-                    {/* …and one source per DECLARED output field, nested under
-                        it. Each SAVES the canonical `steps.<id>.output.<key>`
-                        (the only form the engine resolves) and SHOWS
-                        `varLabel(ref)`, i.e. the short `<id>.<key>`. The key
-                        goes into the ref VERBATIM — `o.label` is display data
-                        and must never be substituted into a ref. */}
-                    {fields.length > 0 && (
-                      <div className="w6w-exprmodal-subsources">
-                        {fields.map((o) => {
-                          const ref = `steps.${st.id}.output.${o.key}`;
-                          return source(
-                            varLabel(ref),
-                            { kind: "var", ref },
-                            "w6w-expr-chip-var",
-                            "·",
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Fragment>
-                );
-              })}
+          <div className="w6w-exprmodal-group">
+            <div className="w6w-field-labelrow">
+              <span className="w6w-exprmodal-group-label">Secrets</span>
+              {options.createSecret && (
+                <button
+                  type="button"
+                  className="w6w-btn w6w-btn-ghost w6w-btn-sm"
+                  data-testid="expr-add-secret"
+                  onClick={() => setAdding("secret")}
+                >
+                  + Add
+                </button>
+              )}
             </div>
-          )}
+            {secrets.length === 0 && <span className="w6w-expr-menu-empty">No secrets</span>}
+            {secrets.map((s) =>
+              source(s, { kind: "secret", ref: s }, "w6w-expr-chip-secret", "🔒"),
+            )}
+          </div>
         </aside>
 
         {/* Right: editor over the saved {{ }} template. */}
@@ -573,7 +636,9 @@ export function ExpressionEditorModal({
               Result
               <span className="w6w-muted w6w-small"> — live preview against the sample values</span>
             </span>
-            <pre className="w6w-exprmodal-result">{result || " "}</pre>
+            <Copyable value={result} readOnly>
+              <pre className="w6w-exprmodal-result">{result || " "}</pre>
+            </Copyable>
           </div>
         </div>
       </div>
