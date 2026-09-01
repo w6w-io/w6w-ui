@@ -80,24 +80,33 @@ function projectStepSources(
       // the push.
       hasTrigger = true;
     }
-    // Declared output fields, via the shared trigger-field projection — the one
-    // parser, which already skips a blank/missing `key`. MANUAL-TRIGGER-ONLY: a
-    // webhook/scheduler entry node's `with.fields` payload is `trigger.event`
-    // (see the file-header-level doc below), not `steps.<id>.output`, so it must
-    // not be projected here; on any other node `with.fields` is that action's
-    // INPUT, and projecting it would fabricate declared outputs the step never
-    // produces.
+    // Declared output fields, from one of two DISJOINT sources today — a
+    // manual trigger's own `with.fields`, or a node's static `output`
+    // declaration (`internalNodeDef(...).output`, e.g. `@w6w/template ·
+    // render` / `@w6w/http · request`). A manual trigger never carries a
+    // static `output` (INTERNAL_NODES declares one or the other, never both),
+    // so this is written as explicit precedence rather than a merge that could
+    // silently clobber one with the other: the manual-trigger path wins when
+    // it applies, the static declaration is the fallback otherwise.
+    //
+    // MANUAL-TRIGGER-ONLY for the `with.fields` path: a webhook/scheduler
+    // entry node's `with.fields` payload is `trigger.event` (see the
+    // file-header-level doc below), not `steps.<id>.output`, so it must not be
+    // projected here; on any other node `with.fields` is that action's INPUT,
+    // and projecting it would fabricate declared outputs the step never
+    // produces. The trigger-field parser already skips a blank/missing `key`.
     const isManualTrigger = isTrigger && step.uses.app === TRIGGER_APP;
-    const declared = isManualTrigger ? fieldsToParams(asFieldDefs(step.with?.fields)) : [];
+    const declared: { key: string; label?: string }[] = isManualTrigger
+      ? fieldsToParams(asFieldDefs(step.with?.fields)).map((p) => ({
+          key: p.key,
+          label: p.label,
+        }))
+      : (internalNodeDef(step.uses.app, step.uses.action)?.output ?? []);
     const source: ExpressionStepSource = { id: step.id, label: step.id };
     // OMITTED (not `[]`) when nothing is declared, so a consumer can tell
     // "nothing declared" from "declared none". Keys are verbatim: each becomes
     // `steps.<id>.output.<key>`, and only that form resolves at run time.
-    steps.push(
-      declared.length > 0
-        ? { ...source, outputs: declared.map((p) => ({ key: p.key, label: p.label })) }
-        : source,
-    );
+    steps.push(declared.length > 0 ? { ...source, outputs: declared } : source);
   }
   return { steps, hasTrigger };
 }

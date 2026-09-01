@@ -294,6 +294,16 @@ export interface InternalNodeDef {
   ports?: NodePorts;
   /** Config schema (same `ActionParam[]` shape apps declare) rendered by ParamsForm. */
   params: ActionParam[];
+  /**
+   * This node's static output field keys, when its shape is known ahead of any
+   * run — same shape as `ExpressionStepSource.outputs`
+   * (`components/ExpressionOptions.tsx`), fed verbatim by `projectStepSources`
+   * (`step-preview-state.ts`) so the expression rail can offer
+   * `steps.<id>.output.<key>` for a step using this node. Omitted (not `[]`)
+   * when the node's output is not statically knowable (e.g. `@w6w/document ·
+   * get`, whose shape is whatever JSON the referenced document holds).
+   */
+  output?: { key: string; label?: string }[];
 }
 
 /** Inbound (entry) and outbound (exit) connection-port counts for a node. */
@@ -680,6 +690,10 @@ export const INTERNAL_NODES: InternalNodeDef[] = [
     displayName: "Template",
     group: "compute",
     icon: ICON_TEMPLATE,
+    // Static output shape (core rfcs/node-types.md:582): the already-rendered
+    // string, host-side Handlebars having run — an ordinary `var` ref, not the
+    // `resolveRenderPart` mechanism.
+    output: [{ key: "result" }],
     params: [
       {
         key: "template",
@@ -734,6 +748,15 @@ export const INTERNAL_NODES: InternalNodeDef[] = [
     displayName: "HTTP",
     group: "request",
     icon: ICON_HTTP,
+    // Static output shape: `packages/server/packages/api/internal-nodes.ts:317-322`'s
+    // `runHttpRequest` literally returns these five fields on every response.
+    output: [
+      { key: "status" },
+      { key: "statusText" },
+      { key: "ok" },
+      { key: "headers" },
+      { key: "body" },
+    ],
     params: [
       {
         key: "method",
