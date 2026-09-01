@@ -115,6 +115,9 @@ test("A3/M3 — a document's unsafe field keys (a.b, {x}, leading space, empty) 
   });
   const group = groupFor(container, "Documents");
   assert.ok(group, "expected a Documents group");
+  const toggle = group?.querySelector('[data-testid="expr-toggle-fields"]') as HTMLButtonElement;
+  assert.ok(toggle, "the doc1 row must carry an expand toggle — it has a surviving field");
+  await click(toggle);
   const subRows = Array.from(group?.querySelectorAll(".w6w-exprmodal-subsource-row") ?? []);
   assert.equal(
     subRows.length,
@@ -142,6 +145,9 @@ test("A4/M4 — the render action inserts { kind: 'render', ref }, with the SAME
     options: { documents: [{ key: "doc1", fields: [{ key: "body" }] }] },
   });
   const editor = container.querySelector(".w6w-exprmodal-chips") as HTMLElement;
+  const toggle = container.querySelector('[data-testid="expr-toggle-fields"]') as HTMLButtonElement;
+  assert.ok(toggle, "the doc1 row must carry an expand toggle — it has a surviving field");
+  await click(toggle);
   const renderBtn = container.querySelector(
     '[data-testid="expr-insert-render"]',
   ) as HTMLButtonElement;
@@ -170,6 +176,13 @@ test("A4a/M5 — the render action appears ONLY inside the Documents group's fie
       documents: [{ key: "doc1", fields: [{ key: "f1" }] }],
     },
   });
+
+  const docsGroupBeforeExpand = groupFor(container, "Documents");
+  const docToggle = docsGroupBeforeExpand?.querySelector(
+    '[data-testid="expr-toggle-fields"]',
+  ) as HTMLButtonElement;
+  assert.ok(docToggle, "the doc1 row must carry an expand toggle — it has a surviving field");
+  await click(docToggle);
 
   const total = container.querySelectorAll('[data-testid="expr-insert-render"]').length;
   assert.equal(
@@ -241,6 +254,11 @@ test("A4b/M9 — a chip inserted via the render action still carries the ⇄ tog
     options: { documents: [{ key: "doc1", fields: [{ key: "body" }] }] },
   });
   const editor = container.querySelector(".w6w-exprmodal-chips") as HTMLElement;
+  const expandToggle = container.querySelector(
+    '[data-testid="expr-toggle-fields"]',
+  ) as HTMLButtonElement;
+  assert.ok(expandToggle, "the doc1 row must carry an expand toggle — it has a surviving field");
+  await click(expandToggle);
   const renderBtn = container.querySelector(
     '[data-testid="expr-insert-render"]',
   ) as HTMLButtonElement;

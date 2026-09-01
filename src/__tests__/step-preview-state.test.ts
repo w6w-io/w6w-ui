@@ -1,7 +1,14 @@
 // Run: node --test src/__tests__/step-preview-state.test.ts  (Node 24, type-stripped)
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SCHEDULER_APP, TRIGGER_APP, WEBHOOK_APP } from "../flow-types.ts";
+import {
+  DOCUMENT_APP,
+  HTTP_APP,
+  SCHEDULER_APP,
+  TEMPLATE_APP,
+  TRIGGER_APP,
+  WEBHOOK_APP,
+} from "../flow-types.ts";
 import type { StepNode } from "../flow-utils.ts";
 import type { StepTest } from "../provider.tsx";
 import {
@@ -131,5 +138,52 @@ test("upstreamStateSources — a scheduler entry node is still flagged as hasTri
     steps.find((s) => s.id === "gate_1")?.outputs,
     undefined,
     "scheduler must project NO outputs",
+  );
+});
+
+test("upstreamStateSources — a @w6w/template · render ancestor projects its static `result` output", () => {
+  const tmpl = node("gate_1", TEMPLATE_APP, "render");
+  const nodes = [tmpl, node("mid")];
+  const edges = [edge("gate_1", "mid")];
+  const { steps } = upstreamStateSources("mid", nodes, edges);
+  assert.deepEqual(
+    steps.find((s) => s.id === "gate_1")?.outputs?.map((o) => o.key),
+    ["result"],
+  );
+});
+
+test("upstreamStateSources — a @w6w/http · request ancestor projects its static output keys, in order", () => {
+  const req = node("gate_1", HTTP_APP, "request");
+  const nodes = [req, node("mid")];
+  const edges = [edge("gate_1", "mid")];
+  const { steps } = upstreamStateSources("mid", nodes, edges);
+  assert.deepEqual(
+    steps.find((s) => s.id === "gate_1")?.outputs?.map((o) => o.key),
+    ["status", "statusText", "ok", "headers", "body"],
+  );
+});
+
+test("upstreamStateSources — a @w6w/document · get ancestor declares NO static output (undefined, not [])", () => {
+  const doc = node("gate_1", DOCUMENT_APP, "get");
+  const nodes = [doc, node("mid")];
+  const edges = [edge("gate_1", "mid")];
+  const { steps } = upstreamStateSources("mid", nodes, edges);
+  assert.equal(
+    steps.find((s) => s.id === "gate_1")?.outputs,
+    undefined,
+    "@w6w/document · get's output is not statically knowable — must stay undefined",
+  );
+});
+
+test("upstreamStateSources — a manual trigger with no with.fields declares NO outputs (undefined, not [])", () => {
+  const trig = node("gate_1", TRIGGER_APP, "manual");
+  const nodes = [trig, node("mid")];
+  const edges = [edge("gate_1", "mid")];
+  const { steps, hasTrigger } = upstreamStateSources("mid", nodes, edges);
+  assert.equal(hasTrigger, true);
+  assert.equal(
+    steps.find((s) => s.id === "gate_1")?.outputs,
+    undefined,
+    "a manual trigger with no declared fields must not fall through to a static declaration",
   );
 });
