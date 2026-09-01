@@ -3225,7 +3225,6 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: baseline;
-  column-gap: var(--w6w-sp-3);
 }
 
 /* Each row is `display: contents` — it renders no box of its own, so its two
@@ -3236,6 +3235,10 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   font-size: calc(var(--w6w-fs-sm) * 0.9);
 }
 
+/* No `column-gap` on the grid: a gap leaves a hole no cell's own border
+   crosses, breaking the row divider into two segments. The same visual
+   space between key and value comes from padding instead, which is part of
+   each cell's own box — the border-bottom stays one unbroken line. */
 .w6w-resolved-row > * {
   padding: var(--w6w-sp-1-5) 0;
   border-bottom: 1px solid var(--w6w-border);
@@ -3246,6 +3249,7 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
 }
 
 .w6w-resolved-label {
+  padding-right: var(--w6w-sp-3);
   color: var(--w6w-muted);
 }
 
