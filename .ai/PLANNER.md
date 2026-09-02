@@ -62,15 +62,15 @@ small and authoritative for two specific surfaces — see the routing table belo
    ```
    "test": "node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts"
    ```
-   Both roots are real and both matter: `src/__tests__/*.test.ts` (**29** files, measured on
-   `proj/26-08-30-00-fixes-T1.1.2` — this doc's `26` had already drifted to **27** by `f76edc7`
-   (this project's own base, `git ls-tree -r --name-only f76edc7 -- src/__tests__ | grep
-   '\.test\.ts$' | wc -l`, re-verified independently rather than copied from the contract), then
-   this project's own T1.1.1 added `WorkflowFlowEditor.error-port-wiring.test.ts` (28), then T1.1.2
-   added `StepEditModal.setup-and-configure.test.ts` (29) — see the *Gate baselines* section's
-   closing paragraph) and `src/components/__tests__/*.test.ts` (9 files, unchanged: `Copyable`,
-   `CopyableText`, `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`, `UptimeStrip`,
-   `expression-dom`, `expression-template`).
+   Both roots are real and both matter: `src/__tests__/*.test.ts` (**31** files, measured on
+   `main` post-ship — this doc's `29` had already drifted; this project's own T1.1.1 extended the
+   existing `step-preview-state.test.ts` with `output`-projection cases (no new file), T1.1.2 added
+   `ExpressionEditorModal.rail.test.ts` (30), T1.1.3 added `JsonEditor.copy.test.ts` (31) — see the
+   *Gate baselines* section's closing paragraph) and `src/components/__tests__/*.test.ts` (**10**
+   files: `Copyable`, `CopyableText`, `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`,
+   `UptimeStrip`, `expression-dom`, `expression-template`, plus `resolved-clip` — added by
+   uncommitted human WIP found and committed at this project's own ship step, not by any of its
+   three contracted nodes).
    The trap survives the fix that added the second root: a `.test.ts` file placed in a **third**
    location, or named `.test.tsx`, silently never runs — the loader (`src/test-jsx-loader.mjs:16-20`)
    transpiles `.tsx` on import, but the `--test` arguments above are `.test.ts` globs only, so a
@@ -111,12 +111,13 @@ framing (its TRAP 2 section).
 | gate | command | result |
 |---|---|---|
 | token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** |
-| lint | `./node_modules/.bin/biome check .` | `Checked 98 files in ~30ms. No fixes applied.` — 0 errors, measured on `proj/26-08-30-00-fixes-T1.1.2` (this doc's stale `95` had already drifted to **96** at `f76edc7`, this project's own base — independently re-verified via `git archive f76edc7` into a scratch checkout, not copied from the contract; T1.1.1 added `WorkflowFlowEditor.error-port-wiring.test.ts` → 97; T1.1.2 added `StepEditModal.setup-and-configure.test.ts` → 98) |
+| lint | `./node_modules/.bin/biome check .` | `Checked 103 files in ~35ms. No fixes applied.` — 0 errors, measured on `main` post-ship (this doc's stale `98` was already correct at this project's own base, `main` @ `2486441`, independently re-verified by the planner rather than copied — see `.ai/projects/.work/26-08-31-00-issues/FOLLOWUPS.md` F-N4; T1.1.2 added `ExpressionEditorModal.rail.test.ts` → 99; T1.1.3 added `components/use-copy.ts` and `JsonEditor.copy.test.ts` → 101; uncommitted human WIP found and committed at this project's own ship step added `components/resolved-clip.ts` and `components/__tests__/resolved-clip.test.ts` → 103) |
 | typecheck | `./node_modules/.bin/tsc -b --noEmit` | exit 0, no output |
-| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **380 pass, 0 fail** (TAP: `tests 380 · pass 380 · fail 0`), measured on `proj/26-08-30-00-fixes-T1.1.2` (this doc's stale `356` had already drifted to **359** at `f76edc7`, re-verified the same way as the biome count above; T1.1.1 added 11, landing at **370**; T1.1.2 added the remaining **10**, all in the new `StepEditModal.setup-and-configure.test.ts`) |
+| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **404 pass, 0 fail** (TAP: `tests 404 · pass 404 · fail 0`), measured on `main` post-ship (this doc's stale `380` had already drifted to **383** at `main` @ `2486441`, this project's own base — independently re-verified by the planner, not copied from the contract; T1.1.1 extended `step-preview-state.test.ts` with `output`-projection cases; T1.1.2 added `ExpressionEditorModal.rail.test.ts`; T1.1.3 added `JsonEditor.copy.test.ts`, landing at `398`; uncommitted human WIP found and committed at ship added 5 tests in the new `components/__tests__/resolved-clip.test.ts` plus 1 new case in the existing `WorkflowFlowEditor.error-port-wiring.test.ts`, landing at **404**) |
 | `check:css` | `node scripts/build-css.mjs --check` | both `src/styles.css` and `src/code.css` up to date |
-| picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **GREEN 22/22** (matching `EXPECTED_TESTS` in fact 4 above), confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates — not re-run again at closeout since the merge introduced no further picker-layout-touching change beyond what T1.1.3 already gated |
-| copyable (Docker/Chromium) | `bash test/copyable/run.sh` | **GREEN 9/9**, confirmed by the same T1.1.3 gates (`.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md`) — not re-run again at closeout for the same reason |
+| picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **GREEN 22/22** (matching `EXPECTED_TESTS` in fact 4 above), confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates — not re-run at `26-08-31-00-issues`'s closeout since none of its three nodes touched picker-layout-adjacent code |
+| copyable (Docker/Chromium) | `bash test/copyable/run.sh` | **GREEN 9/9**, confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates (`.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md`) — **not re-run at `26-08-31-00-issues`'s closeout**: that project's own T1.1.3 (`copyable` prop on `JsonEditor`) could not run it either, for the same reason recorded in `FOLLOWUPS.md` — it hard-requires a sibling `packages/studio` checkout the harness workspace does not symlink in. `Copyable.tsx` itself is provably unchanged (byte-identical `Copyable.test.ts`/`CopyableText.test.ts`, verified by both T1.1.2 and T1.1.3's evaluators), so this row is stale on file identity, not on behavior — re-run from a full checkout if that changes |
+| expr-template (Docker/Chromium) | `bash test/expr-template/run.sh` | **GREEN 18/18**, re-run at `26-08-31-00-issues`'s closeout on the merged integration tip (`proj/26-08-31-00-issues` — T1.1.2 touched the Result pane's height/flex and the rail this suite's T-height/G-sigil/R4 cover). This gate was missing from this table entirely before this project (see `FOLLOWUPS.md` F-N4) despite fact 5's own text already naming it a real-Chromium suite alongside picker-layout |
 
 The `lint:tokens` line above is **pinned** by this project's own T1.1.1: it dropped
 `_step-builder.scss`'s violations from a red 4-vs-baseline-3 regression back to a clean, matching
@@ -225,3 +226,40 @@ against `.orchestration/projects/_templates/tools/workspace-up.sh:70`, which alr
 `pnpm-workspace.yaml` alongside `deno.json`/`package.json`; this lane's own `core` sibling symlink
 resolved correctly (`readlink -f node_modules/@w6w/expr` → a real path), so the claim no longer
 reproduced and was removed rather than annotated, per this file's own Maintenance rule.
+
+**`26-08-31-00-issues`'s three nodes** (measured on `proj/26-08-31-00-issues` post-merge, forked
+from `main` @ `2486441` — not yet merged to `main`, so no post-merge sha to cite here) found this
+doc's *Gate baselines* table had already drifted **before any task started**: `main` @ `2486441`
+measured `383` pass / `98` biome files (this doc's stale `380`/`98` — the biome count was already
+correct, only the unit-suite count had drifted), and the table had no `expr-template` row at all
+despite fact 5 already naming it a real-Chromium suite alongside `picker-layout`. T1.1.1
+(`InternalNodeDef.output` for `@w6w/template · render` and `@w6w/http · request`, projected by
+`projectStepSources`) extended the existing `step-preview-state.test.ts` — no new file, no biome
+count change. T1.1.2 (expr-editor rail reorder, `Inputs` gate, collapse-by-default, Result-pane
+copy control) added `ExpressionEditorModal.rail.test.ts`. T1.1.3 (`copyable` prop on `JsonEditor`,
+wired to the six step-JSON panes) added `components/use-copy.ts` and `JsonEditor.copy.test.ts`,
+landing at the **`398`/`101`/`31` (`src/__tests__`)** this doc's table and fact 3 now record. The
+`expr-template` suite was re-run at closeout (T1.1.2 touched the Result pane's height/flex the
+suite's `T-height` gates) and added to the table as **GREEN 18/18**. `test/copyable/run.sh` stayed
+un-re-run — it hard-requires a sibling `packages/studio` checkout the harness workspace does not
+symlink in, the same gap T1.1.3's own contract hit and recorded in
+`.ai/projects/.work/26-08-31-00-issues/FOLLOWUPS.md`; `Copyable.tsx` itself is proven byte-identical
+by both T1.1.2 and T1.1.3's evaluators, so the row is stale on provenance only, not on behavior.
+
+**`26-08-31-00-issues`'s ship step** (merged to `main`, this repo's own commit `1a2d056`) found the
+human's `packages/ui` checkout carrying uncommitted WIP overlapping 3 of the project's own touched
+files, blocking the merge outright. Inspected and committed ahead of the merge (`a10cfe8`, not
+authored by this project): a `failureHandling` prop on `NodeConfigForm` (gates retry/on-error
+controls off for trigger nodes) and `resolved-clip.ts` (clips long resolved values in
+`ResolvedParams`' Test-tab rows behind a toggle) — the latter added
+`components/__tests__/resolved-clip.test.ts` (5 tests, 1 new file) and one new case in the existing
+`WorkflowFlowEditor.error-port-wiring.test.ts`, bumping this doc's table and fact 3 to
+**`404`/`103`/`31`**. Three more direct, human-reported UI fixes landed on `main` immediately after
+(`196bef8`, `8e2ef0b`, `14fc103`): `ResolvedParams`' rows moved from a stacked `.w6w-field` layout to
+a dedicated `.w6w-resolved-table`/`.w6w-resolved-row` two-column grid (key left, value right, one
+shared grid via `display: contents` rows rather than one grid per row), with the value in full text
+color instead of muted so it reads distinctly from its label, row text 10% smaller
+(`calc(var(--w6w-fs-sm) * 0.9)`), and no `column-gap` (a gap left a hole no cell's border crossed,
+breaking the row divider — replaced with `padding-right` on the label instead, which stays inside
+each cell's own box). None of the three added or removed a file, so the gate-baseline counts above
+are unmoved by them.

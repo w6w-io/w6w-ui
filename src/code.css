@@ -451,3 +451,88 @@
   font-size: 0.85em;
   font-style: italic;
 }
+
+/* One resolved param: a table row, not a stacked form field — this list is
+   read-only display, never an editable `.w6w-field`, so it earns its own
+   compact key-left/value-right layout instead of a label-above-control block
+   (human report, 2026-09-01: key and value were indistinguishable and every
+   row burned a full stacked block of vertical space). ONE grid across the
+   whole list (`.w6w-resolved-table`), not one grid per row, so every row's
+   key column lines up with the one above and below it. */
+.w6w-resolved-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+}
+
+/* Each row is `display: contents` — it renders no box of its own, so its two
+   children (label, value) become direct items of the parent grid above,
+   sharing its column tracks instead of sizing their own. */
+.w6w-resolved-row {
+  display: contents;
+  font-size: calc(var(--w6w-fs-sm) * 0.9);
+}
+
+/* No `column-gap` on the grid: a gap leaves a hole no cell's own border
+   crosses, breaking the row divider into two segments. The same visual
+   space between key and value comes from padding instead, which is part of
+   each cell's own box — the border-bottom stays one unbroken line. */
+.w6w-resolved-row > * {
+  padding: var(--w6w-sp-1-5) 0;
+  border-bottom: 1px solid var(--w6w-border);
+}
+
+.w6w-resolved-row:last-child > * {
+  border-bottom: none;
+}
+
+.w6w-resolved-label {
+  padding-right: var(--w6w-sp-3);
+  color: var(--w6w-muted);
+}
+
+/* One resolved row's value. `anywhere` (not `break-word`) because these values
+   are markup and URLs as often as prose: a single unbroken 40kB attribute
+   string would otherwise force the whole modal to scroll sideways. Full-
+   strength text color (not `--w6w-muted`) so it reads as the actual content,
+   distinct from the label beside it. */
+.w6w-resolved-value {
+  color: var(--w6w-text);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* The expanded form of a clipped value (`resolved-clip.ts`). A block with its
+   own scroll, so "Show all" can never restore the unbounded inline paste that
+   buried the other params and the run's result. */
+.w6w-resolved-text-full {
+  display: block;
+  margin: var(--w6w-sp-1) 0;
+  max-height: 14em;
+  overflow: auto;
+  padding: var(--w6w-sp-2);
+  background: var(--w6w-panel-2);
+  border: 1px solid var(--w6w-border);
+  border-radius: var(--w6w-radius);
+  font-family: var(--w6w-font-mono);
+  font-size: 0.85em; /* lint-tokens-allow: matches the sibling code-typography rules above in this same file */
+  line-height: var(--w6w-lh-normal);
+  white-space: pre-wrap;
+}
+
+/* Link-weight toggle — this sits inside a value, so it must not read as a
+   second action competing with the modal's own buttons. */
+.w6w-resolved-more {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: var(--w6w-sp-2);
+  color: var(--w6w-accent);
+  font-size: 0.85em; /* lint-tokens-allow: matches the sibling code-typography rules above in this same file */
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.w6w-resolved-more:hover {
+  text-decoration: underline;
+}

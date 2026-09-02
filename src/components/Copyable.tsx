@@ -1,10 +1,12 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef } from "react";
+import { COPIED_MS, useCopyToClipboard } from "./use-copy.ts";
 
 /** Copy glyph, colocated per this file — no shared `Icon` component exists in
  *  `@w6w/ui` (deliberate, 21+ sites elsewhere use this same idiom, e.g.
  *  `CallFromCodeButton.tsx:44-63`). `currentColor` so `.is-copied`'s colour
- *  applies with no extra prop. */
-function CopyGlyph() {
+ *  applies with no extra prop. Exported so `JsonEditor` can reuse it rather
+ *  than redraw it. */
+export function CopyGlyph() {
   return (
     <svg
       width="14"
@@ -23,7 +25,7 @@ function CopyGlyph() {
   );
 }
 
-function CheckGlyph() {
+export function CheckGlyph() {
   return (
     <svg
       width="14"
@@ -40,10 +42,6 @@ function CheckGlyph() {
     </svg>
   );
 }
-
-/** Majority precedent across the tree: `admin/src/components/CopyButton.tsx:17`,
- *  `studio/src/pages/EndpointsPage.tsx:823`. */
-const COPIED_MS = 1500;
 
 export interface CopyableProps {
   /** Exact text written to the clipboard. */
@@ -77,7 +75,9 @@ export interface CopyableProps {
  * This is the FIRST factored clipboard helper in `@w6w/ui`: every existing
  * copy-to-clipboard call in the tree today (studio's five pages,
  * `CallFromCodeButton`, admin's own `CopyButton`) is an independently authored
- * inline clipboard write — the sole call in this package's `src` is below.
+ * inline clipboard write — the sole call in this package's `src` now lives in
+ * `./use-copy.ts`'s `useCopyToClipboard`, which this component and
+ * `JsonEditor` both consume.
  *
  * A decorating component, not a new `TextField`/`TextArea` primitive
  * (HITL-2): the copy behaviour, the glyphs, the box geometry and the copied
@@ -93,31 +93,10 @@ export function Copyable(props: CopyableProps) {
     className,
     children,
   } = props;
-  const [copied, setCopied] = useState(false);
+  // The clipboard write + copied/revert-timer state machine — the only place
+  // in `@w6w/ui` that writes to the clipboard, factored into `use-copy.ts`.
+  const { copied, copy } = useCopyToClipboard(value, copiedMs);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Clear the revert timer on unmount so it never fires setState after the
-  // component is gone.
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const doCopy = useCallback(async () => {
-    try {
-      // The only clipboard-write call site in `@w6w/ui` (gated by the
-      // project's test plan). Guarded + awaited: an absent (insecure origin)
-      // or rejecting clipboard leaves the idle icon and throws nothing further.
-      await navigator.clipboard?.writeText(value);
-      setCopied(true);
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setCopied(false), copiedMs);
-    } catch {
-      // Absent/denied/rejecting clipboard: stay idle.
-    }
-  }, [value, copiedMs]);
 
   const selectInnerControl = useCallback(() => {
     const control = wrapRef.current?.querySelector("input, textarea") as
@@ -141,12 +120,12 @@ export function Copyable(props: CopyableProps) {
       if (target?.closest?.("button")) return; // the icon handles its own click
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && el.contains(sel.anchorNode)) return; // drag-selection guard
-      void doCopy();
+      void copy();
       selectInnerControl();
     };
     el.addEventListener("click", onBoxClick);
     return () => el.removeEventListener("click", onBoxClick);
-  }, [readOnly, doCopy, selectInnerControl]);
+  }, [readOnly, copy, selectInnerControl]);
 
   return (
     <div ref={wrapRef} className={["w6w-copyable", className ?? ""].filter(Boolean).join(" ")}>
@@ -155,7 +134,7 @@ export function Copyable(props: CopyableProps) {
         type="button"
         className={`w6w-icon-btn w6w-copyable-btn${copied ? " is-copied" : ""}`}
         aria-label={label}
-        onClick={() => void doCopy()}
+        onClick={() => void copy()}
       >
         {copied ? <CheckGlyph /> : <CopyGlyph />}
       </button>

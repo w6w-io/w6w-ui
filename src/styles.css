@@ -720,6 +720,47 @@
   border-color: var(--w6w-success);
 }
 
+/* A rail source with surviving child rows (a multi-field document, a step
+   with declared outputs) — the "whole source" button plus the expand/collapse
+   toggle, as siblings on one row. Mirrors `.w6w-exprmodal-subsource-row`'s
+   flex row + child-fills-width shape (`:74-82` above), kept as its own class
+   because the two are counted independently by the test suite. */
+.w6w-exprmodal-source-row {
+  display: flex;
+  align-items: center;
+  gap: var(--w6w-sp-1);
+}
+
+.w6w-exprmodal-source-row .w6w-exprmodal-source {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Same 20x20 icon-button chrome as `.w6w-exprmodal-render-btn` above — the
+   sizing precedent for a dense rail control — but a separate class: this
+   toggles the `.w6w-exprmodal-subsources` block below it, the render-btn
+   inserts a `render` part. */
+.w6w-exprmodal-toggle-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--w6w-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--w6w-muted);
+  font-size: var(--w6w-fs-xs);
+  cursor: pointer;
+}
+
+.w6w-exprmodal-toggle-btn:hover {
+  background: var(--w6w-panel);
+  border-color: var(--w6w-accent);
+  color: var(--w6w-text);
+}
+
 .w6w-exprmodal-main {
   min-width: 0;
   min-height: 0;
@@ -798,8 +839,26 @@
   min-height: 0;
 }
 
+/* The pane's 42% share above is a flex-basis on `.w6w-exprmodal-result-pane`
+   itself (a column flex container) — it must still reach the `<pre>` now that
+   `Copyable` wraps it in a `.w6w-copyable` div. That wrapper is the actual
+   column child now, so it needs the grow/shrink share instead. */
+.w6w-exprmodal-result-pane > .w6w-copyable {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .w6w-exprmodal-result {
   flex: 1 1 auto;
+  /* `.w6w-copyable` is a ROW flex container (`_copyable.scss:5`), and its
+     `:has(> pre)` arm (`_copyable.scss:19-21`) sets `align-items: flex-start`
+     for CodeBlock's snippet case, where the box is sized TO the pre's
+     content. Here it's the other way around — the wrapper is grown to the
+     pane's share by the rule above, and the `<pre>` must fill IT. `flex: 1 1
+     auto`'s grow/shrink applies to the row's main axis (width) and does
+     nothing for height there, so the cross-axis stretch has to be pinned
+     directly on this item, overriding the container's `flex-start`. */
+  align-self: stretch;
   min-height: 0;
   max-height: none;
   overflow: auto;
@@ -808,6 +867,10 @@
   border: 1px solid var(--w6w-border);
   border-radius: 8px;
   padding: var(--w6w-sp-2-5) var(--w6w-sp-3);
+  /* `_copyable.scss:105-107`'s corner-button clearance is scoped to
+     `.w6w-code-block` and does not apply here — same 40px value (icon box +
+     inset + gap) so the overlaid copy button never sits on the first line. */
+  padding-right: var(--w6w-sp-10);
   color: var(--w6w-muted);
   font-family: var(--w6w-font-mono);
   font-size: 12.5px;
@@ -2463,6 +2526,27 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   min-height: 0;
 }
 
+/* The `copyable` prop's button overlays `.w6w-json-editor`'s own top-right
+   corner — mirrors `_copyable.scss:86-100`'s CodeBlock geometry, but there is
+   no `<pre>` here for a `:has()` selector to reach, so it is scoped directly
+   to the class instead. Anchored to `.w6w-json-editor` itself (not the
+   CodeMirror scroller), so it stays pinned to the visible corner rather than
+   scrolling with the content. */
+.w6w-json-editor {
+  position: relative;
+}
+
+.w6w-json-editor > .w6w-copyable-btn {
+  position: absolute;
+  top: var(--w6w-sp-1);
+  right: var(--w6w-sp-1);
+  /* Opaque backdrop: this button sits ON the JSON's first line, and
+     `.w6w-icon-btn`'s transparent idle state would let the text read through
+     it (mirrors `_copyable.scss:93-99`'s rationale exactly). */
+  background: var(--w6w-panel);
+  border-color: var(--w6w-border);
+}
+
 .w6w-stepconfig-body .w6w-field > textarea {
   resize: vertical;
 }
@@ -3128,6 +3212,91 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   color: var(--w6w-muted);
   font-size: 0.85em;
   font-style: italic;
+}
+
+/* One resolved param: a table row, not a stacked form field — this list is
+   read-only display, never an editable `.w6w-field`, so it earns its own
+   compact key-left/value-right layout instead of a label-above-control block
+   (human report, 2026-09-01: key and value were indistinguishable and every
+   row burned a full stacked block of vertical space). ONE grid across the
+   whole list (`.w6w-resolved-table`), not one grid per row, so every row's
+   key column lines up with the one above and below it. */
+.w6w-resolved-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+}
+
+/* Each row is `display: contents` — it renders no box of its own, so its two
+   children (label, value) become direct items of the parent grid above,
+   sharing its column tracks instead of sizing their own. */
+.w6w-resolved-row {
+  display: contents;
+  font-size: calc(var(--w6w-fs-sm) * 0.9);
+}
+
+/* No `column-gap` on the grid: a gap leaves a hole no cell's own border
+   crosses, breaking the row divider into two segments. The same visual
+   space between key and value comes from padding instead, which is part of
+   each cell's own box — the border-bottom stays one unbroken line. */
+.w6w-resolved-row > * {
+  padding: var(--w6w-sp-1-5) 0;
+  border-bottom: 1px solid var(--w6w-border);
+}
+
+.w6w-resolved-row:last-child > * {
+  border-bottom: none;
+}
+
+.w6w-resolved-label {
+  padding-right: var(--w6w-sp-3);
+  color: var(--w6w-muted);
+}
+
+/* One resolved row's value. `anywhere` (not `break-word`) because these values
+   are markup and URLs as often as prose: a single unbroken 40kB attribute
+   string would otherwise force the whole modal to scroll sideways. Full-
+   strength text color (not `--w6w-muted`) so it reads as the actual content,
+   distinct from the label beside it. */
+.w6w-resolved-value {
+  color: var(--w6w-text);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* The expanded form of a clipped value (`resolved-clip.ts`). A block with its
+   own scroll, so "Show all" can never restore the unbounded inline paste that
+   buried the other params and the run's result. */
+.w6w-resolved-text-full {
+  display: block;
+  margin: var(--w6w-sp-1) 0;
+  max-height: 14em;
+  overflow: auto;
+  padding: var(--w6w-sp-2);
+  background: var(--w6w-panel-2);
+  border: 1px solid var(--w6w-border);
+  border-radius: var(--w6w-radius);
+  font-family: var(--w6w-font-mono);
+  font-size: 0.85em; /* lint-tokens-allow: matches the sibling code-typography rules above in this same file */
+  line-height: var(--w6w-lh-normal);
+  white-space: pre-wrap;
+}
+
+/* Link-weight toggle — this sits inside a value, so it must not read as a
+   second action competing with the modal's own buttons. */
+.w6w-resolved-more {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: var(--w6w-sp-2);
+  color: var(--w6w-accent);
+  font-size: 0.85em; /* lint-tokens-allow: matches the sibling code-typography rules above in this same file */
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.w6w-resolved-more:hover {
+  text-decoration: underline;
 }
 
 .w6w-icon-button {

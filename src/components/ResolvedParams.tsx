@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { JsonEditor } from "../JsonEditor.tsx";
 import { type DataVar, flattenParams, isParamVisible } from "../ParamsForm.tsx";
 import type { StepStartState } from "../provider.tsx";
@@ -13,6 +13,7 @@ import { resolveParamJson, resolveVarsJson } from "../resolved-json.ts";
 import type { ActionParam } from "../types.ts";
 import { useExpressionOptions } from "./ExpressionOptions.tsx";
 import { varLabel } from "./expression-dom.ts";
+import { clipResolvedValue } from "./resolved-clip.ts";
 
 export interface ResolvedParamsProps {
   /** The action's declared params — same list `ParamsForm` renders on Configure. */
@@ -111,11 +112,11 @@ export function ResolvedParams({
   }
 
   return (
-    // A dedicated wrapper class — not just `.w6w-stack` — so a host/test can
-    // scope to exactly these rows: `IncomingStateField` above also renders a
-    // top-level `.w6w-field` (its own container class), which a bare
-    // `.w6w-field` query would otherwise pick up too.
-    <div className="w6w-resolved-params w6w-stack">
+    // `.w6w-resolved-table` is the ONE grid this whole row list shares — each
+    // `.w6w-resolved-row` below is `display: contents` and contributes its
+    // two children straight into these column tracks, so every row's key
+    // column lines up with every other row's.
+    <div className="w6w-resolved-params w6w-resolved-table">
       {rows.map((param) =>
         param.type === "vars" ? (
           <ResolvedVarsRow key={param.key} param={param} value={values[param.key]} scope={scope} />
@@ -167,8 +168,8 @@ function buildResolvedJson(
 
 function ResolvedParamRow({ label, segments }: { label: string; segments: ResolvedSegment[] }) {
   return (
-    <div className="w6w-field">
-      <span>{label}</span>
+    <div className="w6w-resolved-row">
+      <span className="w6w-resolved-label">{label}</span>
       <div className="w6w-resolved-value">
         <ResolvedSegments segments={segments} />
       </div>
@@ -192,8 +193,8 @@ function ResolvedVarsRow({
       ? (param.default as DataVar[])
       : [];
   return (
-    <div className="w6w-field">
-      <span>{param.label ?? param.key}</span>
+    <div className="w6w-resolved-row">
+      <span className="w6w-resolved-label">{param.label ?? param.key}</span>
       {rows.length === 0 ? (
         <p className="w6w-muted w6w-small">None configured.</p>
       ) : (
@@ -230,10 +231,10 @@ function ResolvedSegmentView({ segment }: { segment: ResolvedSegment }) {
       return segment.ref ? (
         <>
           <ExprChip kind="var" refName={segment.ref} />
-          <span>{formatResolvedValue(segment.value)}</span>
+          <ResolvedValueText value={segment.value} />
         </>
       ) : (
-        <span>{formatResolvedValue(segment.value)}</span>
+        <ResolvedValueText value={segment.value} />
       );
     case "unresolved":
       // Never the ref/template text as if it were the value: the chip shows
@@ -258,6 +259,39 @@ function ResolvedSegmentView({ segment }: { segment: ResolvedSegment }) {
       // and no ciphertext or plaintext is ever available to show here.
       return <ExprChip kind="secret" refName={segment.ref} />;
   }
+}
+
+/**
+ * One resolved value's text, clipped when it is long enough to take over the
+ * row (`resolved-clip.ts`). A document body or a rendered template resolves to
+ * tens of kilobytes of HTML, and a row that pastes all of it inline buries the
+ * other params and the run's result below it (human report, 2026-09-01).
+ *
+ * Expanding does NOT restore the unbounded paste: the full text goes into its
+ * own scrollable block (`.w6w-resolved-text-full`), so the row can never grow
+ * past a few lines of the panel either way. A value inside the budget renders
+ * exactly as it always did — one bare `<span>`, no toggle, no wrapper.
+ */
+function ResolvedValueText({ value }: { value: unknown }) {
+  const [expanded, setExpanded] = useState(false);
+  const full = formatResolvedValue(value);
+  const clip = clipResolvedValue(full);
+  if (!clip.clipped) return <span>{full}</span>;
+  return (
+    <>
+      <span className={expanded ? "w6w-resolved-text-full" : undefined}>
+        {expanded ? full : `${clip.text}…`}
+      </span>
+      <button
+        type="button"
+        className="w6w-resolved-more"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((e) => !e)}
+      >
+        {expanded ? "Show less" : `Show all (${clip.length.toLocaleString()} characters)`}
+      </button>
+    </>
+  );
 }
 
 const CHIP_SIGIL: Record<"var" | "secret" | "expr", string> = { var: "◆", secret: "🔒", expr: "ƒ" };

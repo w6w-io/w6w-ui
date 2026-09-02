@@ -980,6 +980,7 @@ export function ControlStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Step JSON"
+              copyable
             />
           ) : configView === "params-code" ? (
             <JsonEditor
@@ -988,6 +989,7 @@ export function ControlStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Parameters JSON"
+              copyable
               onValidChange={(p) =>
                 p &&
                 typeof p === "object" &&
@@ -996,7 +998,13 @@ export function ControlStepConfig({
               }
             />
           ) : (
-            <NodeConfigForm config={draftConfig} onChange={setDraftConfig} />
+            <NodeConfigForm
+              config={draftConfig}
+              onChange={setDraftConfig}
+              // A trigger has no failure of its own to retry or police — same
+              // reason its canvas card renders no error exit port.
+              failureHandling={!isTriggerApp(node.app)}
+            />
           ))}
         {tab === "test" &&
           testable &&
@@ -2360,6 +2368,7 @@ export function AppStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Step JSON"
+              copyable
             />
           ) : configView === "params-code" ? (
             <JsonEditor
@@ -2368,6 +2377,7 @@ export function AppStepConfig({
               minHeight="240px"
               height="100%"
               aria-label="Parameters JSON"
+              copyable
               onValidChange={(p) =>
                 p &&
                 typeof p === "object" &&

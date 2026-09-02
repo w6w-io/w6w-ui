@@ -226,7 +226,7 @@ test("Test tab — lists every configured param with its resolved value, disting
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  const rows = Array.from(container.querySelectorAll(".w6w-resolved-params > .w6w-field"));
+  const rows = Array.from(container.querySelectorAll(".w6w-resolved-params > .w6w-resolved-row"));
   // A1/D-1: exactly the params whose effective value is NOT deep-equal to its
   // declared default — `from_name` (falls back to its default ""),
   // `dynamic_template` (explicitly `false` in `with`, equal to its default)
@@ -378,7 +378,9 @@ test("Test tab — lists every configured param with its resolved value, disting
     setTextareaValue(overrideBox, JSON.stringify({ subject: "Overridden Subject" }));
   });
 
-  const rowsAfter = Array.from(container.querySelectorAll(".w6w-resolved-params > .w6w-field"));
+  const rowsAfter = Array.from(
+    container.querySelectorAll(".w6w-resolved-params > .w6w-resolved-row"),
+  );
   const subjectRowAfter = rowsAfter.find((r) => r.querySelector("span")?.textContent === "Subject");
   assert.ok(subjectRowAfter);
   assert.ok(
@@ -448,7 +450,7 @@ test("A3 — every visible param at its default renders a distinct, non-blank em
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  const rows = container.querySelectorAll(".w6w-resolved-params > .w6w-field");
+  const rows = container.querySelectorAll(".w6w-resolved-params > .w6w-resolved-row");
   assert.equal(rows.length, 0, "every param is at its default, so no row renders");
   const message = container.querySelector(".w6w-resolved-params p")?.textContent ?? "";
   assert.ok(message.length > 0, "the empty state is non-blank");
