@@ -16,14 +16,15 @@ export interface RepoSyncIndicatorProps {
   "data-testid"?: string;
 }
 
-/** Branching line — a bound git repository. Copied path data from
- *  `studio/src/components/Layout.tsx`'s `RepositoryIcon` — `@w6w/ui` has no
+/** The GitHub mark — the connection provider's icon (`RepoBinding.provider` is
+ *  always `"github"` today). Copied path data from
+ *  `studio/src/components/Layout.tsx:38-40`'s `GitHubLink` — `@w6w/ui` has no
  *  shared `Icon` component, so each component colocates its own glyph
  *  (`studio/src/components/SyncButton.tsx:3-5`). */
-function RepositoryGlyph() {
+function GitHubGlyph() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M4 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0ZM4 17a2 2 0 1 0 4 0a2 2 0 1 0-4 0ZM14 17a2 2 0 1 0 4 0a2 2 0 1 0-4 0ZM5.25 7h1.5v8h-1.5ZM7.64 8.36L14.64 15.36L13.36 16.64L6.36 9.64Z" />
+      <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.11.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.04 1.78 2.72 1.26 3.38.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.51-1.47.11-3.06 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.59.23 2.77.11 3.06.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.4-5.27 5.69.41.36.78 1.06.78 2.15v3.18c0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" />
     </svg>
   );
 }
@@ -73,7 +74,7 @@ export function RepoSyncIndicator(props: RepoSyncIndicatorProps) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <RepositoryGlyph />
+        <GitHubGlyph />
         <span className="w6w-repo-sync-branch">{branch}</span>
         {shortSha != null && <code className="w6w-repo-sync-sha">{shortSha}</code>}
       </button>
