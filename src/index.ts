@@ -107,6 +107,9 @@ export type { EditButtonProps } from "./components/EditButton.tsx";
 export { DeleteButton } from "./components/DeleteButton.tsx";
 export type { DeleteButtonProps } from "./components/DeleteButton.tsx";
 
+export { RepoSyncIndicator } from "./components/RepoSyncIndicator.tsx";
+export type { RepoSyncIndicatorProps } from "./components/RepoSyncIndicator.tsx";
+
 // Reachable from studio (TC6's rail tool reuses it — D-10) as of this project;
 // verified absent from every barrel before this line (`src/index.ts` and
 // `src/flow.ts` both 0 hits).
