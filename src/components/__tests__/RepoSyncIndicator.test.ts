@@ -289,3 +289,70 @@ test("A8 — branch always renders; shortSha/lastSyncLabel render only when non-
     root2.unmount();
   });
 });
+
+test("A1 — no w6w-repo-sync-spin element in the DOM while syncing is falsy", async () => {
+  const { container, root } = mountRoot();
+  await act(async () => {
+    root.render(React.createElement(RepoSyncIndicator, baseProps()));
+  });
+  assert.equal(container.querySelector(".w6w-repo-sync-spin"), null);
+  await act(async () => {
+    root.unmount();
+  });
+
+  const { container: container2, root: root2 } = mountRoot();
+  await act(async () => {
+    root2.render(React.createElement(RepoSyncIndicator, baseProps({ syncing: false })));
+  });
+  assert.equal(container2.querySelector(".w6w-repo-sync-spin"), null);
+  await act(async () => {
+    root2.unmount();
+  });
+});
+
+test("A2 — exactly one w6w-repo-sync-spin renders inside .w6w-repo-sync-icon alongside the GitHub svg while syncing", async () => {
+  const { container, root } = mountRoot();
+  await act(async () => {
+    root.render(React.createElement(RepoSyncIndicator, baseProps({ syncing: true })));
+  });
+  const spins = container.querySelectorAll(".w6w-repo-sync-spin");
+  assert.equal(spins.length, 1);
+  const icon = container.querySelector(".w6w-repo-sync-icon");
+  assert.ok(icon);
+  assert.ok(icon.contains(spins[0]));
+  const svgs = icon.querySelectorAll("svg");
+  assert.equal(svgs.length, 2);
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("A3 — spin badge is aria-hidden; trigger reflects aria-busy from syncing", async () => {
+  const { container, root } = mountRoot();
+  await act(async () => {
+    root.render(React.createElement(RepoSyncIndicator, baseProps({ syncing: true })));
+  });
+  const spin = container.querySelector(".w6w-repo-sync-spin");
+  assert.ok(spin);
+  assert.equal(spin.getAttribute("aria-hidden"), "true");
+  const trigger = container.querySelector(".w6w-repo-sync-trigger");
+  assert.ok(trigger);
+  assert.equal(trigger.getAttribute("aria-busy"), "true");
+
+  await act(async () => {
+    root.unmount();
+  });
+
+  const { container: container2, root: root2 } = mountRoot();
+  await act(async () => {
+    root2.render(React.createElement(RepoSyncIndicator, baseProps({ syncing: false })));
+  });
+  const trigger2 = container2.querySelector(".w6w-repo-sync-trigger");
+  assert.ok(trigger2);
+  assert.equal(trigger2.getAttribute("aria-busy"), "false");
+
+  await act(async () => {
+    root2.unmount();
+  });
+});
