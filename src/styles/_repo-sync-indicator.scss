@@ -27,7 +27,7 @@
 }
 .w6w-repo-sync-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + var(--w6w-sp-1-5));
   right: 0;
   min-width: 220px;
   background: var(--w6w-panel);
