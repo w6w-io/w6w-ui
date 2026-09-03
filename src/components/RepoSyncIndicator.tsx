@@ -29,6 +29,31 @@ function GitHubGlyph() {
   );
 }
 
+/** The in-flight sync badge overlaid on `GitHubGlyph` while `syncing` is true.
+ *  Path data copied verbatim from `studio/src/components/SyncButton.tsx`'s
+ *  `RefreshGlyph` (a stroke-based Feather `refresh-cw` icon); only
+ *  `width`/`height` shrink to 10x10 for this corner-badge use. */
+function SyncSpinGlyph() {
+  return (
+    <svg
+      width={10}
+      height={10}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w6w-repo-sync-spin"
+      aria-hidden="true"
+    >
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </svg>
+  );
+}
+
 /**
  * A compact header control showing a repo glyph, a branch name and a short
  * commit sha, with an inline flyout menu carrying the sync detail and a
@@ -72,9 +97,13 @@ export function RepoSyncIndicator(props: RepoSyncIndicatorProps) {
         className="w6w-repo-sync-trigger"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-busy={syncing}
         onClick={() => setOpen((v) => !v)}
       >
-        <GitHubGlyph />
+        <span className="w6w-repo-sync-icon">
+          <GitHubGlyph />
+          {syncing && <SyncSpinGlyph />}
+        </span>
         <span className="w6w-repo-sync-branch">{branch}</span>
         {shortSha != null && <code className="w6w-repo-sync-sha">{shortSha}</code>}
       </button>
