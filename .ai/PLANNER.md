@@ -11,8 +11,12 @@
 Almost every change lands in `src/`, which splits three ways: **14** top-level `.tsx` files (large,
 often multi-export modules — e.g. `AppPicker.tsx`, and `StepBuilderModal.tsx`, which bundles
 `NodeList`, `CallableList`, `CallableRow` and `ReadyToUseFlow` as sibling functions in one file; see
-fact 1), **22** smaller components under `src/components/`, and **28** SCSS partials under
-`src/styles/` that compile into the two committed `.css` bundles (fact 2). `scripts/` holds two
+fact 1), **20** smaller components under `src/components/` (`.tsx` files only, excluding
+`*.stories.tsx` and the `__tests__/` subdir — `find src/components -maxdepth 1 -type f -name
+'*.tsx' ! -name '*.stories.tsx' | wc -l`; the prior `22` was already wrong before
+`26-09-03-00-changes` added `RepoSyncIndicator.tsx`, which is the only file this project added
+here), and **29** SCSS partials under `src/styles/` that compile into the two committed `.css`
+bundles (fact 2; `26-09-03-00-changes`'s T1.1.1 added `_repo-sync-indicator.scss`, the 29th). `scripts/` holds two
 small Node-only build/lint tools, each documented by its own header docstring — read the docstring
 before the script body (`scripts/build-css.mjs:1-21`, `scripts/lint-tokens.mjs:1-29`). `test/` holds
 four real-browser Docker/Chromium suites (`test/picker-layout`, `test/expr-template`,
@@ -62,15 +66,12 @@ small and authoritative for two specific surfaces — see the routing table belo
    ```
    "test": "node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts"
    ```
-   Both roots are real and both matter: `src/__tests__/*.test.ts` (**31** files, measured on
-   `main` post-ship — this doc's `29` had already drifted; this project's own T1.1.1 extended the
-   existing `step-preview-state.test.ts` with `output`-projection cases (no new file), T1.1.2 added
-   `ExpressionEditorModal.rail.test.ts` (30), T1.1.3 added `JsonEditor.copy.test.ts` (31) — see the
-   *Gate baselines* section's closing paragraph) and `src/components/__tests__/*.test.ts` (**10**
-   files: `Copyable`, `CopyableText`, `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`,
-   `UptimeStrip`, `expression-dom`, `expression-template`, plus `resolved-clip` — added by
-   uncommitted human WIP found and committed at this project's own ship step, not by any of its
-   three contracted nodes).
+   Both roots are real and both matter: `src/__tests__/*.test.ts` (**31** files, unchanged by
+   `26-09-03-00-changes` — see the *Gate baselines* section's closing paragraph for the prior
+   history) and `src/components/__tests__/*.test.ts` (**11** files: `Copyable`, `CopyableText`,
+   `DeleteButton`, `EditButton`, `HistoryTimeline`, `IconButton`, `UptimeStrip`, `expression-dom`,
+   `expression-template`, `resolved-clip`, plus `RepoSyncIndicator` — added by
+   `26-09-03-00-changes`'s T1.1.1).
    The trap survives the fix that added the second root: a `.test.ts` file placed in a **third**
    location, or named `.test.tsx`, silently never runs — the loader (`src/test-jsx-loader.mjs:16-20`)
    transpiles `.tsx` on import, but the `--test` arguments above are `.test.ts` globs only, so a
@@ -110,10 +111,10 @@ framing (its TRAP 2 section).
 
 | gate | command | result |
 |---|---|---|
-| token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** |
-| lint | `./node_modules/.bin/biome check .` | `Checked 103 files in ~35ms. No fixes applied.` — 0 errors, measured on `main` post-ship (this doc's stale `98` was already correct at this project's own base, `main` @ `2486441`, independently re-verified by the planner rather than copied — see `.ai/projects/.work/26-08-31-00-issues/FOLLOWUPS.md` F-N4; T1.1.2 added `ExpressionEditorModal.rail.test.ts` → 99; T1.1.3 added `components/use-copy.ts` and `JsonEditor.copy.test.ts` → 101; uncommitted human WIP found and committed at this project's own ship step added `components/resolved-clip.ts` and `components/__tests__/resolved-clip.test.ts` → 103) |
+| token-lint ratchet | `node scripts/lint-tokens.mjs` | `lint:tokens — 59 violations in 18 files (baseline: 59)`, **exit 0** — `26-09-03-00-changes`'s T1.1.1 briefly regressed this (a hard-coded `6px` in `_repo-sync-indicator.scss:30` instead of `--w6w-sp-1-5`), undetected by that task's own contract/eval since neither ran this gate; caught and fixed at that project's own closeout (`a0027cd`) — **this gate is not covered by `tsc`/`biome`/`npm test`/`check:css` at all; run it explicitly, don't assume the other four imply it** |
+| lint | `./node_modules/.bin/biome check .` | `Checked 105 files in ~35ms. No fixes applied.` — 0 errors, measured on `main` post-ship (`26-09-03-00-changes`'s T1.1.1 added `RepoSyncIndicator.tsx` + its test file, `103` → `105`) |
 | typecheck | `./node_modules/.bin/tsc -b --noEmit` | exit 0, no output |
-| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **404 pass, 0 fail** (TAP: `tests 404 · pass 404 · fail 0`), measured on `main` post-ship (this doc's stale `380` had already drifted to **383** at `main` @ `2486441`, this project's own base — independently re-verified by the planner, not copied from the contract; T1.1.1 extended `step-preview-state.test.ts` with `output`-projection cases; T1.1.2 added `ExpressionEditorModal.rail.test.ts`; T1.1.3 added `JsonEditor.copy.test.ts`, landing at `398`; uncommitted human WIP found and committed at ship added 5 tests in the new `components/__tests__/resolved-clip.test.ts` plus 1 new case in the existing `WorkflowFlowEditor.error-port-wiring.test.ts`, landing at **404**) |
+| unit suite | `node --import ./src/test-jsx-loader.mjs --test src/__tests__/*.test.ts src/components/__tests__/*.test.ts` | **410 pass, 0 fail** (TAP: `tests 410 · pass 410 · fail 0`), measured on `main` post-ship (`26-09-03-00-changes`'s T1.1.1 added `RepoSyncIndicator.test.ts`, `404` → `410`) |
 | `check:css` | `node scripts/build-css.mjs --check` | both `src/styles.css` and `src/code.css` up to date |
 | picker-layout (Docker/Chromium) | `bash test/picker-layout/run.sh` | **GREEN 22/22** (matching `EXPECTED_TESTS` in fact 4 above), confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates — not re-run at `26-08-31-00-issues`'s closeout since none of its three nodes touched picker-layout-adjacent code |
 | copyable (Docker/Chromium) | `bash test/copyable/run.sh` | **GREEN 9/9**, confirmed by `26-08-26-01-studio-fixes`'s T1.1.3 gates (`.ai/projects/.work/26-08-26-01-studio-fixes/results/T1.1.3.result.md`) — **not re-run at `26-08-31-00-issues`'s closeout**: that project's own T1.1.3 (`copyable` prop on `JsonEditor`) could not run it either, for the same reason recorded in `FOLLOWUPS.md` — it hard-requires a sibling `packages/studio` checkout the harness workspace does not symlink in. `Copyable.tsx` itself is provably unchanged (byte-identical `Copyable.test.ts`/`CopyableText.test.ts`, verified by both T1.1.2 and T1.1.3's evaluators), so this row is stale on file identity, not on behavior — re-run from a full checkout if that changes |
@@ -153,7 +154,7 @@ So:
   `git diff <base>..<verified-sha> --stat` over `packages/ui` is one command and tells you exactly
   which of the facts above are ahead of you.
 
-verified: 2026-08-28 · against `main` @ `f846edc` (project 26-08-07-01-ui-dblclick-test-receiver-pin closeout, post-merge)
+verified: 2026-09-03 · against `main` @ `a0027cd` (project 26-09-03-00-changes closeout, post-merge)
 
 **What this project changed here, at a glance** — this file did not exist before
 `26-08-22-02-ui-planner-and-token-debt`; `packages/ui/.ai/` had zero prior art, and this task
@@ -263,3 +264,19 @@ color instead of muted so it reads distinctly from its label, row text 10% small
 breaking the row divider — replaced with `padding-right` on the label instead, which stays inside
 each cell's own box). None of the three added or removed a file, so the gate-baseline counts above
 are unmoved by them.
+
+**`26-09-03-00-changes`'s T1.1.1** (merged to `main` at `b2c3e27`, hardened to `a0027cd`) added
+`RepoSyncIndicator` — a header status control (icon + branch + short sha, an inline flyout with a
+"Sync now" slot) built with no shared `Menu`/`Popover` primitive in this package (a deliberate
+choice, see that project's D-3) — one new component file, one new test file
+(`components/__tests__/RepoSyncIndicator.test.ts`), and one new SCSS partial
+(`_repo-sync-indicator.scss`, the 29th, appended to `styles.scss`'s `@use` list). Landed the gate
+baselines at **`410`/`105`/`29` partials / `11` `components/__tests__` files**. It also corrected
+this doc's stale `22`-components figure (already wrong before this project touched anything — see
+*Where work happens* above) and — the one thing worth a future contract-writer's attention — its
+own contract's test plan ran `tsc`/`biome`/the unit suite/`check:css` but not `lint:tokens`, so a
+hard-coded `6px` literal in the new partial shipped past both the developer and evaluator
+undetected; the closeout Phase-3 gate sweep caught it (a real, currently-green, separately-gated
+ratchet this table has documented all along), fixed it (`var(--w6w-sp-1-5)`, exactly `6px`), and
+restored the ratchet to its unchanged baseline. **Gate baselines table above already reflects the
+fixed state** — the regression never reached a merged `main` commit uncorrected.
