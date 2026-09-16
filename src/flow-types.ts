@@ -5,6 +5,9 @@
  * `@w6w/workflow-types` are structurally compatible.
  */
 
+// T1.1.1 — `edgeVisuals`'s run-state argument; see `run-visuals.ts`.
+import type { EdgeRunState } from "./run-visuals.ts";
+
 export interface FlowStep {
   id: string;
   uses: { app: string; action: string; connection?: string | null };
@@ -79,24 +82,45 @@ export interface FlowEdge {
  * The React Flow presentation for an edge lane — **the one place** the error
  * look is spelled out.
  *
- * Two callers need it and they run at different times: `workflowToFlow` stamps a
- * *stored* edge on load, and `setEdgeWhen` (`flow-connect.ts`) stamps an edge the
- * author re-lanes **live**, before any save. Spelled out twice, the two drift and
- * a freshly marked error edge stops looking like a reloaded one. The className is
- * what `styles.css`'s `.w6w-edge-error` block paints from `--w6w-danger`; no
- * custom edge component is involved (D-T1-7).
+ * Three callers need it and they run at different times: `workflowToFlow` stamps
+ * a *stored* edge on load, `setEdgeWhen` (`flow-connect.ts`) stamps an edge the
+ * author re-lanes **live**, before any save, and a live-run repaint effect
+ * (`WorkflowFlowEditor.tsx`, T1.1.1) restyles an edge as a run polls in. Spelled
+ * out more than once, the copies drift and a freshly marked error edge stops
+ * looking like a reloaded one. The className is what `styles.css`'s
+ * `.w6w-edge-error`/`.w6w-edge-taken`/`.w6w-edge-skipped` blocks paint from
+ * `--w6w-danger`/`--w6w-success`/`--w6w-muted`; no custom edge component is
+ * involved (D-T1-7).
  *
- * A `"success"`/absent lane returns an **empty object** — not `{ className: "" }` —
- * so a success edge carries neither key and a definition round-trips unchanged.
- * That makes it a trap for a *re-laning* caller: spreading `{}` over an edge that
- * already carries the error class leaves the class in place, so `setEdgeWhen`
- * assigns both keys explicitly rather than spreading.
+ * `runState` (T1.1.1) is the edge's OWN taken/skipped verdict (see
+ * `run-visuals.ts`'s `edgeRunState`) — omitted (or `undefined`) when there is no
+ * run in progress, or the run hasn't decided this edge's fate yet, in which case
+ * this returns exactly what it always has. `workflowToFlow`'s and `setEdgeWhen`'s
+ * call sites deliberately never have a live run's state available (a *stored*
+ * load and a live *re-lane* are never mid-run), so both pass no `runState` at
+ * all — only the new repaint-effect call site does.
+ *
+ * A `"success"`/absent lane with no `runState` returns an **empty object** — not
+ * `{ className: "" }` — so an untouched success edge carries neither key and a
+ * definition round-trips unchanged. That makes it a trap for a *re-laning*
+ * caller: spreading `{}` over an edge that already carries the error class
+ * leaves the class in place, so `setEdgeWhen` assigns both keys explicitly
+ * rather than spreading.
  */
-export function edgeVisuals(when: "success" | "error" | undefined): {
+export function edgeVisuals(
+  when: "success" | "error" | undefined,
+  runState?: EdgeRunState,
+): {
   className?: string;
   label?: string;
 } {
-  return when === "error" ? { className: "w6w-edge-error", label: "on error" } : {};
+  const lane = when === "error" ? { className: "w6w-edge-error", label: "on error" } : {};
+  if (!runState) return lane;
+  const runClass = runState === "taken" ? "w6w-edge-taken" : "w6w-edge-skipped";
+  return {
+    className: lane.className ? `${lane.className} ${runClass}` : runClass,
+    ...(lane.label ? { label: lane.label } : {}),
+  };
 }
 
 /**

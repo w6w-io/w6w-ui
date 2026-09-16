@@ -13,11 +13,32 @@ import {
   isInternalApp,
   sourceHandleForLane,
 } from "./flow-types.ts";
+// T1.1.1 — the run-aware visual state a live-run repaint effect stamps onto a
+// node's `data` (see `WorkflowFlowEditor.tsx`'s patch effect). Never written
+// here: `workflowToFlow` is memoized on workflow identity alone (Trap 1), so
+// threading run state through it would repaint nothing on a poll tick.
+import type { RunStatus, StepVisualState } from "./run-visuals.ts";
 
 export interface StepNodeData extends Record<string, unknown> {
   step: FlowStep;
   /** True for internal pseudo-app nodes (`@w6w/*`) — rendered as pill cards. */
   isInternal: boolean;
+  /**
+   * This step's status within the run the host is currently showing
+   * (T1.1.1). `undefined`/`"no-run"` ⇒ no run, or this canvas isn't showing
+   * one. Patched in by `WorkflowFlowEditor.tsx`'s live-run repaint effect —
+   * never set here, and never read by {@link flowToWorkflow}, which only
+   * ever reads `.step` off a node's `data` (A6 — nothing run-related is
+   * persisted).
+   */
+  stepStatus?: StepVisualState;
+  /**
+   * The owning run's OWN status, alongside {@link stepStatus} — a node
+   * card's visual is a function of BOTH (RunStatus × StepStatus, not
+   * StepStatus alone; see `run-visuals.ts`'s `stepNodeVisual`). Same
+   * provenance/persistence rules as `stepStatus`.
+   */
+  runStatus?: RunStatus;
 }
 
 export type StepNode = Node<StepNodeData>;
@@ -324,7 +345,11 @@ export function workflowToFlow(wf: FlowWorkflow): { nodes: StepNode[]; edges: Ed
       sourceHandle: sourceHandleForLane(when),
       animated: false,
       data: { when },
-      ...edgeVisuals(when),
+      // No run state here either (T1.1.1): `workflowToFlow` only ever runs
+      // on workflow identity change (Trap 1), never on a live run's poll
+      // tick, so it has no run state to pass — the live-run repaint effect
+      // in `WorkflowFlowEditor.tsx` is the one call site that does.
+      ...edgeVisuals(when, undefined),
     };
   });
 

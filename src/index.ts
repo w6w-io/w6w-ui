@@ -126,3 +126,8 @@ export type { RepoSyncIndicatorProps } from "./components/RepoSyncIndicator.tsx"
 // `src/flow.ts` both 0 hits).
 export { NodeConfigForm } from "./NodeConfigForm.tsx";
 export type { NodeConfig } from "./NodeConfigForm.tsx";
+
+export { StepStatusPill } from "./components/StepStatusPill.tsx";
+export type { StepStatus, StepStatusPillProps } from "./components/StepStatusPill.tsx";
+export { ExecutionLogPanel } from "./components/ExecutionLogPanel.tsx";
+export type { ExecutionLogPanelProps, ExecutionLogStep } from "./components/ExecutionLogPanel.tsx";

@@ -47,6 +47,36 @@
   fill: var(--w6w-panel);
 }
 
+/* Run-state edge painting (T1.1.1) — whether a main-graph edge was TAKEN or
+   SKIPPED by the run currently showing on the canvas (see `run-visuals.ts`'s
+   `edgeRunState`). Both classes are ADDITIVE to `.w6w-edge-error` above (an
+   edge can be `w6w-edge-error w6w-edge-taken` at once), so ORDER decides how
+   they compose — same equal-(0,4,0)-specificity discipline `.w6w-edge-error`
+   already documents, kept below it in source:
+
+   - `.w6w-edge-taken`'s STROKE COLOUR is guarded to the non-error case via
+     `:where(:not(.w6w-edge-error))` — `:where()` contributes ZERO
+     specificity, so this stays at the SAME (0,4,0) weight as every other
+     block here instead of out-ranking `.selected` below. A taken ERROR edge
+     (the failure path a run actually followed) keeps the danger colour — the
+     fact of having failed does not stop being true — and only gets the
+     thicker stroke-width (the second, unconditional rule).
+   - `.w6w-edge-skipped` is intentionally UNGUARDED: a skipped error edge
+     (the step succeeded, so its error lane never fired) dims to muted same
+     as a skipped success edge does — the failure never happened, so danger
+     is the wrong colour regardless of which lane it is. */
+.w6w-flow .react-flow__edge.w6w-edge-taken:where(:not(.w6w-edge-error)) .react-flow__edge-path {
+  stroke: var(--w6w-success);
+}
+.w6w-flow .react-flow__edge.w6w-edge-taken .react-flow__edge-path {
+  stroke-width: 2.5;
+}
+.w6w-flow .react-flow__edge.w6w-edge-skipped .react-flow__edge-path {
+  stroke: var(--w6w-muted);
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+}
+
 /* A step's own Notes, shown under its canvas card — human override,
    2026-08-30, so a description written once (settings → gear icon) is
    visible without opening the step. One line, clipped with an ellipsis (the

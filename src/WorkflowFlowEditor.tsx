@@ -81,6 +81,7 @@ import {
   type FlowStep,
   type FlowWorkflow,
   WEBHOOK_APP,
+  edgeVisuals,
   internalNodeIcon,
   internalNodeLabel,
   internalNodeParams,
@@ -111,6 +112,11 @@ import {
   WorkflowProjectProvider,
   useW6WApi,
 } from "./provider.tsx";
+// T1.1.1 — the pure run-visual derivation, no React import (`run-visuals.ts`'s
+// own header). This file is the one production caller that turns it into
+// pixels: a live-run repaint effect (in `Inner`) feeds the results into
+// `data`, and `StepNodeCard`/`ControlNodeCard` read them back off `data`.
+import { type RunState, edgeRunState, stepNodeVisual, stepVisualState } from "./run-visuals.ts";
 // One implementation of the incoming-state pipeline, shared by every surface
 // that offers upstream seed chips (this file's step editor + ▶ Run collect
 // form, and StepBuilderModal's add-step Test tab) — see `step-preview-state.ts`'s
@@ -226,6 +232,26 @@ export interface WorkflowFlowEditorProps {
    * HITL-4(b): the invoke path's ambient scope is already project-aware.
    */
   project?: string;
+  /**
+   * The live run's per-step state, when the canvas is showing one (T1.1.1).
+   * Omitted ⇒ the canvas renders exactly as it does today: every node in its
+   * default look, every edge unstyled beyond its own `when` lane. This
+   * editor does no fetching of its own — the host (`studio`) owns polling
+   * `GET /runs/:id` and passes each successive result here, the same
+   * "host owns the query, editor is presentational" split `apps`/`readOnly`
+   * already establish for every other external data source.
+   *
+   * A structural subset of `RunState` in `@w6w/workflow-types` (mirrors this
+   * file's own `FlowWorkflow`/`FlowStep` — see `flow-types.ts`'s header
+   * note): `packages/ui` takes no dependency on the engine's types, so a
+   * caller who already has the real `RunState` is compatible for free.
+   *
+   * Never persisted: {@link flowToWorkflow} never reads it — a run is not
+   * part of the workflow that ran, and `data.stepStatus`/`data.runStatus`
+   * (where this ends up on the canvas) are never among the fields it reads
+   * back off a node.
+   */
+  runState?: RunState;
 }
 
 /**
@@ -296,6 +322,7 @@ function Inner({
   apps,
   exprOptions,
   project,
+  runState,
 }: WorkflowFlowEditorProps) {
   const api = useW6WApi();
   const appsById = useMemo(() => new Map((apps ?? []).map((a) => [a.id, a])), [apps]);
@@ -320,6 +347,44 @@ function Inner({
   const savePosition = value.settings?.savePosition !== false;
   const [nodes, setNodes, onNodesChange] = useNodesState<StepNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
+  // T1.1.1 — live run-state repaint. `initial` above deliberately re-derives
+  // nodes/edges ONLY on workflow identity change (Trap 1 — its own lint
+  // suppression comment a few lines up says so), so a poll tick that
+  // changes `runState` while `value.id` stays put would be invisible to the
+  // cards if it went through `workflowToFlow` — that memo simply never fires
+  // again. This effect instead patches the already-authoritative React Flow
+  // state directly, the same mechanism a drag/connect/delete already uses to
+  // update `nodes`/`edges` without re-deriving `initial`.
+  //
+  // Only new `data` keys are stamped — `stepStatus`/`runStatus` on nodes, a
+  // run-aware `className`/`label` on edges. `data.step` and `data.when` (the
+  // fields `flowToWorkflow` reads back to build the persisted document) are
+  // never touched here, so nothing run-related can round-trip into a saved
+  // workflow (A6).
+  //
+  // Functional `setNodes`/`setEdges` updaters read the PREVIOUS state
+  // directly, so `nodes`/`edges` need not be dependencies — keeping this
+  // effect keyed on `runState` alone (plus the setters, stable across
+  // renders) is what makes it fire on every run-state change and nothing
+  // else, including a plain drag or edit that doesn't touch `runState`.
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        const stepStatus = stepVisualState(runState, n.id);
+        if (n.data.stepStatus === stepStatus && n.data.runStatus === runState?.status) return n;
+        return { ...n, data: { ...n.data, stepStatus, runStatus: runState?.status } };
+      }),
+    );
+    setEdges((eds) =>
+      eds.map((e) => {
+        const lane = edgeLane(e);
+        const run = edgeRunState(runState, e.source, lane);
+        const visuals = edgeVisuals(lane, run);
+        if (e.className === visuals.className && e.label === visuals.label) return e;
+        return { ...e, className: visuals.className, label: visuals.label };
+      }),
+    );
+  }, [runState, setNodes, setEdges]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -1827,15 +1892,26 @@ function StepNodeCard({ id, data, selected }: NodeProps<StepNode>) {
   const appName = app?.displayName || step.uses.app || "—";
   // Per-step ports (T2.3.1): a persisted `ports.in > 1` renders a multi-input handle.
   const ports = nodePortsForStep(step);
+  // T1.1.1 — run-execution visual, RunStatus × StepStatus (A3). `data.stepStatus`
+  // is stamped by `Inner`'s live-run repaint effect, never by `workflowToFlow`.
+  const visual = stepNodeVisual(data.stepStatus ?? "no-run", data.runStatus);
   return (
     <div>
       <NodeControls id={id} runnable />
       <div
+        data-run-status={data.stepStatus ?? "no-run"}
         style={{
           // `relative` so the Handles center on the CARD, not the whole node
           // (which also spans the meta line below) — keeps ports vertically centered.
           position: "relative",
-          border: `1px solid ${selected ? "var(--w6w-accent)" : "var(--w6w-border)"}`,
+          // Selection always wins the BORDER COLOUR (unchanged from before
+          // T1.1.1 — the ternary this extends); width/style/opacity keep
+          // reflecting the run status underneath so a selected running/failed
+          // step is still distinguishable from a selected idle one.
+          border: `${visual.borderWidth}px ${visual.borderStyle} ${
+            selected ? "var(--w6w-accent)" : visual.borderColor
+          }`,
+          opacity: selected ? 1 : visual.opacity,
           background: "var(--w6w-panel)",
           color: "var(--w6w-text)",
           borderRadius: 4,
@@ -1911,16 +1987,22 @@ function ControlNodeCard({ id, data, selected }: NodeProps<StepNode>) {
   // subscription, never as a node), so this card is the only one that needs
   // the guard.
   const isTrigger = isTriggerApp(step.uses.app);
+  // T1.1.1 — same run-execution visual StepNodeCard derives; see its comment.
+  const visual = stepNodeVisual(data.stepStatus ?? "no-run", data.runStatus);
   return (
     <div>
       {/* Compute/trigger nodes can be test-run; flow-control nodes cannot. */}
       <NodeControls id={id} runnable={!isControlApp(step.uses.app)} />
       <div
+        data-run-status={data.stepStatus ?? "no-run"}
         style={{
           // `relative` so the Handles center on the CARD, not the whole node
           // (which also spans the meta line below) — keeps ports vertically centered.
           position: "relative",
-          border: `1px solid ${selected ? "var(--w6w-accent)" : "var(--w6w-border)"}`,
+          border: `${visual.borderWidth}px ${visual.borderStyle} ${
+            selected ? "var(--w6w-accent)" : visual.borderColor
+          }`,
+          opacity: selected ? 1 : visual.opacity,
           background: "var(--w6w-panel-2)",
           color: "var(--w6w-text)",
           borderRadius: 4,

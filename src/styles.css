@@ -2624,6 +2624,38 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
   fill: var(--w6w-panel);
 }
 
+/* Run-state edge painting (T1.1.1) — whether a main-graph edge was TAKEN or
+   SKIPPED by the run currently showing on the canvas (see `run-visuals.ts`'s
+   `edgeRunState`). Both classes are ADDITIVE to `.w6w-edge-error` above (an
+   edge can be `w6w-edge-error w6w-edge-taken` at once), so ORDER decides how
+   they compose — same equal-(0,4,0)-specificity discipline `.w6w-edge-error`
+   already documents, kept below it in source:
+
+   - `.w6w-edge-taken`'s STROKE COLOUR is guarded to the non-error case via
+     `:where(:not(.w6w-edge-error))` — `:where()` contributes ZERO
+     specificity, so this stays at the SAME (0,4,0) weight as every other
+     block here instead of out-ranking `.selected` below. A taken ERROR edge
+     (the failure path a run actually followed) keeps the danger colour — the
+     fact of having failed does not stop being true — and only gets the
+     thicker stroke-width (the second, unconditional rule).
+   - `.w6w-edge-skipped` is intentionally UNGUARDED: a skipped error edge
+     (the step succeeded, so its error lane never fired) dims to muted same
+     as a skipped success edge does — the failure never happened, so danger
+     is the wrong colour regardless of which lane it is. */
+.w6w-flow .react-flow__edge.w6w-edge-taken:where(:not(.w6w-edge-error)) .react-flow__edge-path {
+  stroke: var(--w6w-success);
+}
+
+.w6w-flow .react-flow__edge.w6w-edge-taken .react-flow__edge-path {
+  stroke-width: 2.5;
+}
+
+.w6w-flow .react-flow__edge.w6w-edge-skipped .react-flow__edge-path {
+  stroke: var(--w6w-muted);
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+}
+
 /* A step's own Notes, shown under its canvas card — human override,
    2026-08-30, so a description written once (settings → gear icon) is
    visible without opening the step. One line, clipped with an ellipsis (the
@@ -3435,4 +3467,125 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
 .w6w-repo-sync-item:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+/* --- StepStatusPill ---------------------------------------------------- */
+/* Mirrors `.w6w-health-pill` shape for shape (see `_health.scss`), with its
+   own five-state colour set behind `--w6w-step-color` — never a new global
+   `--w6w-*` token, only the base palette (`--w6w-muted`/`--w6w-accent`/
+   `--w6w-success`/`--w6w-danger`) this file is scoped to. */
+.w6w-step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--w6w-sp-1-5);
+  padding: var(--w6w-sp-0-5) var(--w6w-sp-2) var(--w6w-sp-0-5) var(--w6w-sp-1-5);
+  border: 1px solid color-mix(in srgb, var(--w6w-step-color) 40%, var(--w6w-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--w6w-step-color) 12%, transparent);
+  color: var(--w6w-text);
+  font-size: var(--w6w-fs-xs);
+  line-height: var(--w6w-lh-normal);
+  white-space: nowrap;
+  --w6w-step-color: var(--w6w-muted);
+}
+
+.w6w-step-pill-pending {
+  --w6w-step-color: var(--w6w-muted);
+}
+
+.w6w-step-pill-running {
+  --w6w-step-color: var(--w6w-accent);
+}
+
+.w6w-step-pill-succeeded {
+  --w6w-step-color: var(--w6w-success);
+}
+
+.w6w-step-pill-failed {
+  --w6w-step-color: var(--w6w-danger);
+}
+
+/* Same base colour as `pending` — a dashed border, not a second colour, is
+   what keeps this distinct: colour alone is never the only signal, and this
+   pill already carries a different text label too. */
+.w6w-step-pill-skipped {
+  --w6w-step-color: var(--w6w-muted);
+  border-style: dashed;
+}
+
+.w6w-step-pill-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--w6w-step-color);
+}
+
+.w6w-step-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- ExecutionLogPanel --------------------------------------------------- */
+/* A vertical ordered list, not `_history-timeline.scss`'s idiom: that
+   partial lays out a fixed WINDOW of time-proportional lanes (`left`/`width`
+   percentages against a shared axis) for a health-history strip, which has
+   no notion of "one row per step" or of steps that haven't happened yet.
+   This panel is a plain in-order list of a priori unbounded rows, closer in
+   shape to `.w6w-resolved-table`'s row list — reused here as `.w6w-stack`
+   (`_layout.scss`) for the two-block (input/output) stack inside a row,
+   rather than inventing a second vertical-list treatment.
+
+   Each row's own box (border/background/border-radius/padding) comes from
+   `.w6w-section` (`_sections.scss`), reused rather than duplicated here —
+   `ApiCallsPanel.tsx`'s collapsed-by-default `<details>` idiom, applied to
+   this panel's rows (REVIEW.md R-1). This file only adds the row-specific
+   layout `.w6w-section` doesn't know about: the flex line for the summary's
+   pill/label/timing. */
+.w6w-execution-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--w6w-sp-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.w6w-execution-log-empty {
+  width: 100%;
+  padding: var(--w6w-sp-4);
+  border: 1px dashed var(--w6w-border);
+  border-radius: var(--w6w-radius);
+  text-align: center;
+}
+
+.w6w-execution-log-row {
+  min-width: 0;
+}
+
+.w6w-execution-log-row-header {
+  display: flex;
+  align-items: center;
+  gap: var(--w6w-sp-2);
+  flex-wrap: wrap;
+}
+
+.w6w-execution-log-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: var(--w6w-fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.w6w-execution-log-timing {
+  flex-shrink: 0;
+  color: var(--w6w-muted);
+  font-size: var(--w6w-fs-xs);
+}
+
+.w6w-execution-log-json {
+  min-width: 0;
 }

@@ -149,7 +149,10 @@ function planConnect(
         id,
         sourceHandle: sourceHandleForLane(when),
         data: { when },
-        ...edgeVisuals(when),
+        // No run state: this mints a freshly DRAWN edge, never a run-taken
+        // one — the live run-aware repaint is a separate effect
+        // (WorkflowFlowEditor.tsx, T1.1.1), not this creation path.
+        ...edgeVisuals(when, undefined),
       },
       next,
     ),
@@ -284,7 +287,9 @@ function planRelane(
   // error class / a stale error-port anchor on an edge being moved back to the
   // success lane (T1.1.1 — `sourceHandle` has exactly the same hazard as
   // `className`).
-  const visuals = edgeVisuals(when);
+  // No run state: an edge is only re-laned during live authoring — there is
+  // no run in progress while an author re-lanes an edge (T1.1.1).
+  const visuals = edgeVisuals(when, undefined);
   const relaned: Edge = {
     ...me,
     id: flowEdgeId(me.source, me.target, when),
