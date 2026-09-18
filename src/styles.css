@@ -3542,6 +3542,21 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
    this panel's rows (REVIEW.md R-1). This file only adds the row-specific
    layout `.w6w-section` doesn't know about: the flex line for the summary's
    pill/label/timing. */
+/* The optional header row (T1.1.1 A4) — rendered only when the host supplies
+   `onDismiss`, and in BOTH branches below, since the empty state is exactly
+   where a dismiss control is needed most. Right-aligned, mirroring where
+   studio's own `.notice-close` dismiss sits on a panel header; that class is
+   studio-scoped CSS and does not exist in this package, so only the placement
+   transfers, not the rule. */
+.w6w-execution-log-head {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--w6w-sp-2);
+  width: 100%;
+  margin-bottom: var(--w6w-sp-2);
+}
+
 .w6w-execution-log {
   display: flex;
   flex-direction: column;

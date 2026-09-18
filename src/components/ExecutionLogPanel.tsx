@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { CodeBlock } from "../CodeBlock.tsx";
+import { IconButton } from "./IconButton.tsx";
 import { StepStatusPill } from "./StepStatusPill.tsx";
 import type { StepStatus } from "./StepStatusPill.tsx";
 
@@ -32,6 +33,13 @@ export interface ExecutionLogPanelProps {
   steps: ExecutionLogStep[];
   /** Shown instead of the list when `steps` is empty. */
   emptyLabel?: ReactNode;
+  /**
+   * Supplied ⇒ the panel grows a header row carrying a dismiss control that
+   * calls this and nothing else (T1.1.1). Omitted ⇒ no header row at all, no
+   * extra DOM node. The panel still owns no run state — it only reports the
+   * click; the host decides what dismissing means.
+   */
+  onDismiss?: () => void;
 }
 
 /**
@@ -42,21 +50,39 @@ export interface ExecutionLogPanelProps {
  * queries (the host docks the panel; see `_scale.scss`'s breakpoint
  * docstring). Fills whatever box its host gives it.
  */
-export function ExecutionLogPanel({ steps, emptyLabel }: ExecutionLogPanelProps) {
+export function ExecutionLogPanel({ steps, emptyLabel, onDismiss }: ExecutionLogPanelProps) {
+  // Rendered by BOTH branches below, deliberately: the reported repro (T-1) is
+  // a canvas whose log panel shows "No steps have run yet." — a header mounted
+  // only above the `<ol>` would be invisible in exactly that state, and that is
+  // the state the dismiss control exists to get the user out of.
+  const head = onDismiss ? (
+    <div className="w6w-execution-log-head">
+      <IconButton label="Dismiss run log" data-testid="execution-log-dismiss" onClick={onDismiss}>
+        ×
+      </IconButton>
+    </div>
+  ) : null;
+
   if (steps.length === 0) {
     return (
-      <div className="w6w-execution-log-empty">
-        <p className="w6w-muted w6w-small">{emptyLabel ?? "No steps have run yet."}</p>
-      </div>
+      <>
+        {head}
+        <div className="w6w-execution-log-empty">
+          <p className="w6w-muted w6w-small">{emptyLabel ?? "No steps have run yet."}</p>
+        </div>
+      </>
     );
   }
 
   return (
-    <ol className="w6w-execution-log">
-      {steps.map((step) => (
-        <ExecutionLogRow key={step.id} step={step} />
-      ))}
-    </ol>
+    <>
+      {head}
+      <ol className="w6w-execution-log">
+        {steps.map((step) => (
+          <ExecutionLogRow key={step.id} step={step} />
+        ))}
+      </ol>
+    </>
   );
 }
 

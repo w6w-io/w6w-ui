@@ -336,3 +336,101 @@ test("A4/M5 — _execution-log.scss does not redefine .w6w-section's border/back
     "padding must come from .w6w-section, not be redefined here",
   );
 });
+
+// ─── A4 (T1.1.1): the optional dismiss control ──────────────────────────────
+// `onDismiss` is supplied ⇒ a header row carrying an `IconButton` whose click
+// calls it and nothing else. Omitted ⇒ no header row at all. Asserted in BOTH
+// render branches: the reported repro (M1) is a run with no steps yet, i.e. the
+// `w6w-execution-log-empty` branch, which a head mounted only above the `<ol>`
+// would never reach.
+
+/** The index of the first occurrence of `needle`, or -1. */
+function at(html: string, needle: string) {
+  return html.indexOf(needle);
+}
+
+test("A4/M1 — with onDismiss supplied, the EMPTY branch renders the dismiss control above the empty state, and clicking it calls onDismiss exactly once", async () => {
+  let calls = 0;
+  const { container, root } = await mountPanel({
+    steps: [],
+    onDismiss: () => {
+      calls += 1;
+    },
+  });
+
+  const dismiss = container.querySelector('[data-testid="execution-log-dismiss"]');
+  assert.ok(dismiss, "the empty branch must render the dismiss control");
+  assert.equal(
+    dismiss.getAttribute("aria-label"),
+    "Dismiss run log",
+    "the control carries its own accessible name",
+  );
+  const html = container.innerHTML;
+  assert.ok(
+    at(html, "w6w-execution-log-head") < at(html, "w6w-execution-log-empty"),
+    `the head must render above the body, got: ${html}`,
+  );
+  assert.match(html, /No steps have run yet\./, "the empty state itself is untouched");
+
+  await act(async () => {
+    dismiss.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  const afterClick = calls;
+
+  await act(async () => {
+    root.unmount();
+  });
+  assert.equal(afterClick, 1, "one click is exactly one onDismiss call");
+});
+
+test("A4 — with onDismiss supplied, the POPULATED branch renders the same dismiss control above the step list", async () => {
+  let calls = 0;
+  const { container, root } = await mountPanel({
+    steps: [RUN_SHORTER],
+    onDismiss: () => {
+      calls += 1;
+    },
+  });
+
+  const dismiss = container.querySelector('[data-testid="execution-log-dismiss"]');
+  assert.ok(dismiss, "a populated panel must render the dismiss control too");
+  const html = container.innerHTML;
+  assert.ok(
+    at(html, "w6w-execution-log-head") < at(html, "w6w-execution-log-row"),
+    `the head must render above the rows, got: ${html}`,
+  );
+  assert.equal(
+    container.querySelectorAll(".w6w-execution-log-row").length,
+    1,
+    "the step rows are still rendered below the head",
+  );
+
+  await act(async () => {
+    dismiss.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  const afterClick = calls;
+
+  await act(async () => {
+    root.unmount();
+  });
+  assert.equal(afterClick, 1, "one click is exactly one onDismiss call");
+});
+
+test("A4/M2 — with onDismiss omitted, no dismiss control and no header row exist in EITHER branch", async () => {
+  const empty = await renderPanel({ steps: [] });
+  assert.doesNotMatch(empty, /execution-log-dismiss/, `empty branch grew a control: ${empty}`);
+  assert.doesNotMatch(empty, /w6w-execution-log-head/, `empty branch grew the head row: ${empty}`);
+
+  const populated = await renderPanel({ steps: [RUN_LONGER] });
+  assert.doesNotMatch(
+    populated,
+    /execution-log-dismiss/,
+    `populated branch grew a control: ${populated}`,
+  );
+  assert.doesNotMatch(
+    populated,
+    /w6w-execution-log-head/,
+    `populated branch grew the head row: ${populated}`,
+  );
+  assert.match(populated, /w6w-execution-log-row-header/, "the rows themselves are unchanged");
+});

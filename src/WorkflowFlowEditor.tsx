@@ -252,6 +252,16 @@ export interface WorkflowFlowEditorProps {
    * back off a node.
    */
   runState?: RunState;
+  /**
+   * Fired the instant a step test starts — the ▶ collect form's Run button, or
+   * `StepEditModal`'s footer Test button — before the invoke goes out, so a host
+   * can drop whatever run its canvas was showing (T1.1.1) instead of leaving a
+   * test to run underneath a stale run's highlighting.
+   *
+   * On the click, never on the result: only one of those two surfaces has a
+   * completion to report at all, and the click is the one moment both share.
+   */
+  onTestRun?: () => void;
 }
 
 /**
@@ -323,6 +333,7 @@ function Inner({
   exprOptions,
   project,
   runState,
+  onTestRun,
 }: WorkflowFlowEditorProps) {
   const api = useW6WApi();
   const appsById = useMemo(() => new Map((apps ?? []).map((a) => [a.id, a])), [apps]);
@@ -880,6 +891,10 @@ function Inner({
   // DECLARED params and drops the rest (`core/runtime/src/resolve.ts`).
   const performRunStep = useCallback(
     async (id: string, values: Record<string, unknown>, state?: StepStartState) => {
+      // T1.1.1: a step test starts NOW, so the host drops the run it was
+      // showing before the invoke goes out — the canvas returns to editable on
+      // the user's action, not on this test's eventual result.
+      onTestRun?.();
       const node = nodes.find((n) => n.id === id);
       if (!node) return;
       const step = node.data.step;
@@ -929,7 +944,7 @@ function Inner({
         persistStepRun(id, fixture, { status: "failed", error: err.message ?? String(e) });
       }
     },
-    [nodes, api, persistStepRun, project],
+    [nodes, api, persistStepRun, project, onTestRun],
   );
 
   const controls = useMemo<StepControls>(
@@ -1328,6 +1343,7 @@ function Inner({
                   initialView={editView}
                   onChange={(next) => updateStep(editingId, next)}
                   onClose={() => setEditingId(null)}
+                  onTestRun={onTestRun}
                 />
               )}
 
@@ -2066,6 +2082,7 @@ export function StepEditModal({
   onClose,
   readOnly,
   initialView = "props",
+  onTestRun,
 }: {
   workflowId: string;
   step: FlowStep;
@@ -2075,6 +2092,8 @@ export function StepEditModal({
   onClose: () => void;
   readOnly?: boolean;
   initialView?: EditView;
+  /** Fired the instant the footer Test button is clicked, before the test runs (T1.1.1). */
+  onTestRun?: () => void;
 }) {
   const api = useW6WApi();
   const apps = useContext(AppsCtx);
@@ -2510,7 +2529,12 @@ export function StepEditModal({
                   type="button"
                   className="w6w-btn"
                   disabled={readOnly || !canTest || testBusy}
-                  onClick={() => testRunRef.current?.run()}
+                  onClick={() => {
+                    // T1.1.1: before the run, so the host clears whatever run
+                    // the canvas was showing on the click itself.
+                    onTestRun?.();
+                    testRunRef.current?.run();
+                  }}
                 >
                   {testBusy ? "Testing…" : "Test"}
                 </button>

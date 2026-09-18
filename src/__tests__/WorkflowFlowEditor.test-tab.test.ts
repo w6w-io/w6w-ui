@@ -464,3 +464,72 @@ test("A3 — every visible param at its default renders a distinct, non-blank em
     root.unmount();
   });
 });
+
+// ─── A3 (T1.1.1): `onTestRun` fires on the Test CLICK ───────────────────────
+
+test("A3/M3 — StepEditModal's footer Test button fires onTestRun on the click itself, before the test can have a result", async () => {
+  const container = document.getElementById("root");
+  assert.ok(container);
+  const root = createRoot(container);
+  let testRuns = 0;
+
+  // Same mount + fixture as the "Test tab — lists every configured param…"
+  // case above, which already reaches a state where `canTest` is true.
+  await act(async () => {
+    root.render(
+      React.createElement(W6WUIProvider, {
+        api: fakeApi(),
+        children: React.createElement(ExpressionOptionsProvider, {
+          value: { sampleValues: { "vars.from_email": "hello@example.com" } },
+          children: React.createElement(StepEditModal, {
+            workflowId: "wf_1",
+            step: MAIL_STEP,
+            upstreamSteps: [{ id: "gate_1", label: "gate_1" }],
+            onChange: () => {},
+            onClose: () => {},
+            onTestRun: () => {
+              testRuns += 1;
+            },
+          }),
+        }),
+      }),
+    );
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
+  const testTab = Array.from(container.querySelectorAll(".w6w-subtabs button")).find(
+    (b) => b.textContent === "Test",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(testTab, "the Test subtab button should be present");
+  await act(async () => {
+    testTab.click();
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
+  const testButton = Array.from(container.querySelectorAll(".w6w-stepconfig-footer button")).find(
+    (b) => b.textContent === "Test",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(testButton, "the Test tab's footer Test button should be present");
+  assert.equal(testButton.disabled, false, "and enabled — `canTest` is true for this fixture");
+
+  // Synchronous act: the callback must be observable before ANY awaited
+  // microtask has run. A spy fired on the test's *result* (M3) is still 0 here.
+  act(() => {
+    testButton.click();
+  });
+  assert.equal(testRuns, 1, "onTestRun fires on the click, not on the eventual result");
+
+  // …and the run's own completion must not fire it a second time.
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  assert.equal(testRuns, 1, "exactly one call per click — never a second on the result");
+
+  await act(async () => {
+    root.unmount();
+  });
+});
