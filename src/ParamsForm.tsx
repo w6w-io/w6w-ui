@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useId, useState } from "react";
-import { CodeEditor } from "./CodeEditor.tsx";
+import { CodeEditor, type ScriptLanguage } from "./CodeEditor.tsx";
 import { JsonEditor } from "./JsonEditor.tsx";
 import { ExpressionEditorModal } from "./components/ExpressionEditorModal.tsx";
 import { ExpressionInput } from "./components/ExpressionInput.tsx";
@@ -117,7 +117,14 @@ function makeRenderOne(
       );
     }
     return (
-      <ParamField key={p.key} param={p} value={values[p.key]} onChange={set} readOnly={readOnly} />
+      <ParamField
+        key={p.key}
+        param={p}
+        value={values[p.key]}
+        onChange={set}
+        effective={effective}
+        readOnly={readOnly}
+      />
     );
   };
   return renderOne;
@@ -345,15 +352,25 @@ function RepeatField({
   return <ArrayField param={synthesized} value={value} onChange={onChange} readOnly={readOnly} />;
 }
 
+/** The Python default snippet for a `code` param when its sibling `language`
+ *  resolves to `"python"` (D-3) — a working `return input`-equivalent, same
+ *  shape/intent as `SCRIPT_APP`'s JS default in `flow-types.ts`. */
+const PYTHON_CODE_DEFAULT = "# Runs as a function body. Return the step's output.\nreturn input";
+
 function ParamField({
   param,
   value,
   onChange,
+  effective,
   readOnly,
 }: {
   param: ActionParam;
   value: unknown;
   onChange: (key: string, value: unknown) => void;
+  /** Sibling-value getter (D-1/D-3) — only the `code` branch reads it, to pick
+   *  the editor's language mode and default snippet from a sibling `language`
+   *  param, when one exists. */
+  effective?: (key: string) => unknown;
   readOnly?: boolean;
 }) {
   const label = param.label ?? param.key;
@@ -398,9 +415,20 @@ function ParamField({
     return <JsonParamField param={param} value={value} onChange={onChange} readOnly={readOnly} />;
   }
 
-  // `code` — an inline script/snippet, edited in a real code editor.
+  // `code` — an inline script/snippet, edited in a real code editor. A sibling
+  // `language` param (if one exists in this form) drives both the editor's
+  // CodeMirror mode and — only while the user hasn't entered a value of their
+  // own (D-3) — which hardcoded default snippet is shown.
   if (param.type === "code") {
-    const current = (value ?? param.default ?? "") as string;
+    const siblingLanguage = effective?.("language");
+    const language: ScriptLanguage | undefined =
+      siblingLanguage === "python"
+        ? "python"
+        : siblingLanguage === "javascript"
+          ? "javascript"
+          : undefined;
+    const fallbackDefault = language === "python" ? PYTHON_CODE_DEFAULT : param.default;
+    const current = (value ?? fallbackDefault ?? "") as string;
     return (
       <div className="w6w-field">
         <span>
@@ -411,6 +439,7 @@ function ParamField({
           value={String(current)}
           readOnly={readOnly}
           minHeight="180px"
+          language={language}
           aria-label={`${param.key} code`}
           onChange={(next) => onChange(param.key, next)}
         />
