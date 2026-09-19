@@ -62,7 +62,7 @@ const { createRoot } = await import("react-dom/client");
 const { act } = await import("react-dom/test-utils");
 const { EditorView } = await import("@codemirror/view");
 const { ParamsForm } = await import("../ParamsForm.tsx");
-const { internalNodeParams, SCRIPT_APP } = await import("../flow-types.ts");
+const { internalNodeParams, internalNodeDefaults, SCRIPT_APP } = await import("../flow-types.ts");
 type ActionParam = import("../types.ts").ActionParam;
 
 const JS_DEFAULT = "// Runs as a function body. Return the step's output.\nreturn input;";
@@ -207,6 +207,35 @@ test("c — user code survives a language switch", async () => {
     "// my own code\nreturn 42;",
     "an entered value is never clobbered by the language-conditional default",
   );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+// ROUND 1 — the real composition never mounts `code` with `value === undefined`.
+// `StepBuilderModal.tsx` seeds a new Script step's form from
+// `internalNodeDefaults(SCRIPT_APP, "run")`, which copies EVERY declared
+// param's `default` — including `code`'s JS boilerplate — into `values`
+// before the form ever mounts. Case (b) above (seeded with `{}`) cannot see
+// this: it must fail against the pre-B1 code and pass after.
+test("e — seeded exactly as StepBuilderModal seeds a new Script step: the JS boilerplate default still swaps to Python on a language switch", async () => {
+  const seeded = internalNodeDefaults(SCRIPT_APP, "run");
+  assert.equal(seeded.code, JS_DEFAULT, "sanity: the real seed already carries the JS boilerplate");
+
+  const { container, root } = await render(SCRIPT_PARAMS, seeded);
+  const before = viewFor(container, "code code");
+  assert.equal(before.state.doc.toString(), JS_DEFAULT);
+
+  await setLanguage(container, "python");
+
+  const after = viewFor(container, "code code");
+  assert.equal(
+    after.state.doc.toString(),
+    PYTHON_DEFAULT,
+    "the seeded JS boilerplate (not `undefined`) still counts as replaceable",
+  );
+  assert.equal(lineCommentToken(after), "#");
 
   await act(async () => {
     root.unmount();

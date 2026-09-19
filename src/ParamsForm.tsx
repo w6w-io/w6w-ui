@@ -428,7 +428,18 @@ function ParamField({
           ? "javascript"
           : undefined;
     const fallbackDefault = language === "python" ? PYTHON_CODE_DEFAULT : param.default;
-    const current = (value ?? fallbackDefault ?? "") as string;
+    // A `language` sibling seeds the form with the *JS* boilerplate on mount
+    // (StepBuilderModal.tsx copies every declared `default` into a new
+    // step's initial values) — so `value` is never `undefined` in the real
+    // composition. Treat that untouched boilerplate (either language's own
+    // hardcoded default) as still "replaceable" so a language switch swaps
+    // the shown snippet; anything else the user typed survives untouched.
+    // Gated on `language !== undefined` so a `code` param with no `language`
+    // sibling keeps today's exact `value ?? param.default ?? ""` behaviour.
+    const isUntouchedBoilerplate =
+      language !== undefined &&
+      (value === undefined || value === param.default || value === PYTHON_CODE_DEFAULT);
+    const current = (isUntouchedBoilerplate ? fallbackDefault : (value ?? fallbackDefault)) ?? "";
     return (
       <div className="w6w-field">
         <span>
