@@ -698,12 +698,23 @@ export const INTERNAL_NODES: InternalNodeDef[] = [
     icon: ICON_SCRIPT,
     params: [
       {
+        key: "language",
+        label: "Language",
+        type: "select",
+        default: "javascript",
+        options: [
+          { value: "javascript", label: "JavaScript" },
+          { value: "python", label: "Python" },
+        ],
+        hint: "Execution language for this step's code. Python runs CPython-on-WASM with no network.",
+      },
+      {
         key: "code",
         type: "code",
         label: "Script",
         required: true,
         default: "// Runs as a function body. Return the step's output.\nreturn input;",
-        hint: "JavaScript function body; return the step's output.",
+        hint: "Function body; return the step's output.",
       },
     ],
   },

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useId, useState } from "react";
-import { CodeEditor } from "./CodeEditor.tsx";
+import { CodeEditor, type ScriptLanguage } from "./CodeEditor.tsx";
 import { JsonEditor } from "./JsonEditor.tsx";
 import { ExpressionEditorModal } from "./components/ExpressionEditorModal.tsx";
 import { ExpressionInput } from "./components/ExpressionInput.tsx";
@@ -117,7 +117,14 @@ function makeRenderOne(
       );
     }
     return (
-      <ParamField key={p.key} param={p} value={values[p.key]} onChange={set} readOnly={readOnly} />
+      <ParamField
+        key={p.key}
+        param={p}
+        value={values[p.key]}
+        onChange={set}
+        effective={effective}
+        readOnly={readOnly}
+      />
     );
   };
   return renderOne;
@@ -157,7 +164,32 @@ export function ParamsForm({ params, values, onChange, readOnly }: ParamsFormPro
   // only fields flagged `advanced` collapse under "Additional parameters".
   const main = visible.filter((p) => p.required || !p.advanced);
   const additional = visible.filter((p) => !p.required && p.advanced);
-  const set = (key: string, value: unknown) => onChange({ ...values, [key]: value });
+  // A `language` change is the one edit that must also touch a SIBLING field:
+  // any `code` param whose currently-stored value is still untouched
+  // boilerplate (undefined, its own declared default, or the other
+  // language's hardcoded default) swaps to the new language's default, in
+  // the SAME compound `onChange` call — so there is no intermediate render
+  // with a mismatched `language`/`code` pair (D-3, ROUND 2 / B3). This is the
+  // one choke point every field edit passes through (`makeRenderOne`'s
+  // `ParamField`/`GroupField`/`RepeatField` call sites all get this same
+  // `set` as their `onChange`), so it's the right place to own the write.
+  const set = (key: string, value: unknown) => {
+    if (key === "language") {
+      const next: Record<string, unknown> = { ...values, [key]: value };
+      for (const p of flat) {
+        if (p.type !== "code") continue;
+        const current = values[p.key];
+        const isUntouchedBoilerplate =
+          current === undefined || current === p.default || current === PYTHON_CODE_DEFAULT;
+        if (isUntouchedBoilerplate) {
+          next[p.key] = value === "python" ? PYTHON_CODE_DEFAULT : p.default;
+        }
+      }
+      onChange(next);
+      return;
+    }
+    onChange({ ...values, [key]: value });
+  };
 
   if (params.length === 0) {
     return <p className="w6w-muted w6w-small">This action takes no parameters.</p>;
@@ -345,15 +377,25 @@ function RepeatField({
   return <ArrayField param={synthesized} value={value} onChange={onChange} readOnly={readOnly} />;
 }
 
+/** The Python default snippet for a `code` param when its sibling `language`
+ *  resolves to `"python"` (D-3) — a working `return input`-equivalent, same
+ *  shape/intent as `SCRIPT_APP`'s JS default in `flow-types.ts`. */
+const PYTHON_CODE_DEFAULT = "# Runs as a function body. Return the step's output.\nreturn input";
+
 function ParamField({
   param,
   value,
   onChange,
+  effective,
   readOnly,
 }: {
   param: ActionParam;
   value: unknown;
   onChange: (key: string, value: unknown) => void;
+  /** Sibling-value getter (D-1/D-3) — only the `code` branch reads it, to pick
+   *  the editor's language mode and default snippet from a sibling `language`
+   *  param, when one exists. */
+  effective?: (key: string) => unknown;
   readOnly?: boolean;
 }) {
   const label = param.label ?? param.key;
@@ -398,9 +440,27 @@ function ParamField({
     return <JsonParamField param={param} value={value} onChange={onChange} readOnly={readOnly} />;
   }
 
-  // `code` — an inline script/snippet, edited in a real code editor.
+  // `code` — an inline script/snippet, edited in a real code editor. A sibling
+  // `language` param (if one exists in this form) drives the editor's
+  // CodeMirror mode. The default-snippet swap itself is no longer a render-time
+  // guess (ROUND 1's approach): `ParamsForm`'s `set` (above) already writes the
+  // swapped default into `values.code` the moment `language` changes (D-3,
+  // ROUND 2 / B3), so by the time this renders, `value` is always the true
+  // saved value — this is back to the same `value ?? fallbackDefault ?? ""`
+  // shape the form used before `language` support existed, just with
+  // `fallbackDefault` following the sibling language for the one case where
+  // `value` is genuinely `undefined` (e.g. a `code` param that hasn't been
+  // touched or seeded yet).
   if (param.type === "code") {
-    const current = (value ?? param.default ?? "") as string;
+    const siblingLanguage = effective?.("language");
+    const language: ScriptLanguage | undefined =
+      siblingLanguage === "python"
+        ? "python"
+        : siblingLanguage === "javascript"
+          ? "javascript"
+          : undefined;
+    const fallbackDefault = language === "python" ? PYTHON_CODE_DEFAULT : param.default;
+    const current = (value ?? fallbackDefault ?? "") as string;
     return (
       <div className="w6w-field">
         <span>
@@ -411,6 +471,7 @@ function ParamField({
           value={String(current)}
           readOnly={readOnly}
           minHeight="180px"
+          language={language}
           aria-label={`${param.key} code`}
           onChange={(next) => onChange(param.key, next)}
         />

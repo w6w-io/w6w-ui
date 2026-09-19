@@ -1,0 +1,362 @@
+// Run (from packages/ui): node --import ./src/test-jsx-loader.mjs --test src/__tests__/ParamsForm.script-language.test.ts  (Node 24)
+//
+// T1.2.4 — the `@w6w/script` step's `language` param drives `code`'s CodeMirror
+// mode + default snippet (D-3). Mirrors `params-form-groups.test.ts`'s JSDOM +
+// `react-dom/client` + `act` rig (mounting the real `ParamsForm` with a
+// controlled `Harness`, since `ParamsForm` is a controlled component) plus
+// `ActionTestForm.overrides.test.ts`'s CodeMirror-driving idiom
+// (`EditorView.findFromDOM` + `view.dispatch`) for typing into the `code`
+// editor and reading back what the mounted view actually produced.
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { JSDOM } from "jsdom";
+
+const g = globalThis as unknown as Record<string, unknown>;
+const dom = new JSDOM("<!doctype html><html><body><div id=root></div></body></html>");
+g.window = dom.window;
+g.document = dom.window.document;
+Object.defineProperty(globalThis, "navigator", {
+  value: dom.window.navigator,
+  configurable: true,
+});
+g.HTMLElement = dom.window.HTMLElement;
+g.Node = dom.window.Node;
+g.matchMedia =
+  dom.window.matchMedia ??
+  ((query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }));
+(dom.window as unknown as Record<string, unknown>).matchMedia = g.matchMedia;
+
+class FakeMutationObserver {
+  observe() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+}
+g.MutationObserver =
+  (dom.window as unknown as Record<string, unknown>).MutationObserver ?? FakeMutationObserver;
+(dom.window as unknown as Record<string, unknown>).MutationObserver = g.MutationObserver;
+g.IS_REACT_ACT_ENVIRONMENT = true;
+
+// CodeMirror 6 needs these three (verified necessary + jointly sufficient at
+// `WorkflowFlowEditor.test-tab.test.ts:47-58`, reused verbatim by
+// `params-form-groups.test.ts`/`ActionTestForm.overrides.test.ts`).
+g.Window = dom.window.Window;
+const raf = (cb: (t: number) => void) => setTimeout(() => cb(Date.now()), 0) as unknown as number;
+g.requestAnimationFrame = raf;
+g.cancelAnimationFrame = (id: number) => clearTimeout(id);
+(dom.window as unknown as Record<string, unknown>).requestAnimationFrame = raf;
+(dom.window as unknown as Record<string, unknown>).cancelAnimationFrame = (id: number) =>
+  clearTimeout(id as unknown as NodeJS.Timeout);
+
+const React = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react-dom/test-utils");
+const { EditorView } = await import("@codemirror/view");
+const { ParamsForm } = await import("../ParamsForm.tsx");
+const { internalNodeParams, internalNodeDefaults, SCRIPT_APP } = await import("../flow-types.ts");
+type ActionParam = import("../types.ts").ActionParam;
+
+const JS_DEFAULT = "// Runs as a function body. Return the step's output.\nreturn input;";
+const PYTHON_DEFAULT = "# Runs as a function body. Return the step's output.\nreturn input";
+
+function mountRoot() {
+  const container = document.getElementById("root");
+  assert.ok(container);
+  container.innerHTML = "";
+  const root = createRoot(container);
+  return { container, root };
+}
+
+/** Flush the async tick CodeMirror's view creation needs (shimmed RAF above). */
+async function settle() {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+// `ParamsForm` is a controlled component (rendered fields derive from `values`,
+// not local state) — a stateful wrapper reflects an `onChange` back into the
+// next render, exactly as a real consumer (`StepBuilderModal`) would, and lets
+// a `language` switch happen on the SAME mounted tree (no remount).
+function Harness({
+  params,
+  initialValues,
+  onValues,
+}: {
+  params: ActionParam[];
+  initialValues: Record<string, unknown>;
+  onValues?: (values: Record<string, unknown>) => void;
+}) {
+  const [values, setValues] = React.useState(initialValues);
+  const handleChange = (next: Record<string, unknown>) => {
+    setValues(next);
+    onValues?.(next);
+  };
+  return React.createElement(ParamsForm, { params, values, onChange: handleChange });
+}
+
+/**
+ * `values` is a live box holding the LAST `onChange` call the harness actually
+ * received — the real compound-update output `ParamsForm`'s `set` hands back
+ * (what `buildStep()` would persist), not just what the mounted CodeMirror
+ * doc happens to show (ROUND 2 / B4: the doc can visually update while
+ * `values.code` itself is never written — that was the round-2 bug).
+ */
+async function render(params: ActionParam[], values: Record<string, unknown> = {}) {
+  const { container, root } = mountRoot();
+  const box: { current: Record<string, unknown> } = { current: values };
+  await act(async () => {
+    root.render(
+      React.createElement(Harness, {
+        params,
+        initialValues: values,
+        onValues: (next) => {
+          box.current = next;
+        },
+      }),
+    );
+  });
+  await settle();
+  return { container, root, values: box };
+}
+
+/** The mounted CodeMirror view behind an element identified by its `aria-label`. */
+function viewFor(container: Element, ariaLabel: string) {
+  const content = container.querySelector(`[aria-label="${ariaLabel}"] .cm-content`);
+  assert.ok(content, `CodeMirror content for aria-label="${ariaLabel}" must have mounted`);
+  const view = EditorView.findFromDOM(content as HTMLElement);
+  assert.ok(view, `EditorView.findFromDOM must find the mounted view for "${ariaLabel}"`);
+  return view;
+}
+
+// `@uiw/react-codemirror`'s controlled-`value` sync defers an external
+// overwrite while its own 200ms "isTyping" latch is live (so a controlled
+// re-render mid-keystroke doesn't fight the user) — matched here so a
+// subsequent action (e.g. a language switch) exercises the real steady-state
+// sync path rather than racing that debounce window.
+const CODEMIRROR_TYPING_LATCH_MS = 200;
+
+/** Replace the `code` editor's whole document — the real `onChange` wiring fires from this. */
+async function setCode(container: Element, text: string) {
+  const view = viewFor(container, "code code");
+  await act(async () => {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+    await new Promise((r) => setTimeout(r, CODEMIRROR_TYPING_LATCH_MS + 50));
+  });
+}
+
+async function setLanguage(container: Element, value: string) {
+  const select = container.querySelector('select[aria-label="Language"]') as HTMLSelectElement;
+  assert.ok(select, "the Language select must render");
+  const descriptor = Object.getOwnPropertyDescriptor(
+    dom.window.HTMLSelectElement.prototype,
+    "value",
+  );
+  await act(async () => {
+    descriptor?.set?.call(select, value);
+    select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    // Flush CodeMirror's own post-reconfigure tick (the `code` editor remounts
+    // its extensions on this same render pass) inside this `act` boundary.
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+/**
+ * What the mounted CodeMirror view's OWN language extension produced — its
+ * registered line-comment token (`//` for JS, `#` for Python, none for plain
+ * text). This is state the extension itself derives (`EditorState.languageDataAt`,
+ * a core `@codemirror/state` API, not `@codemirror/language`), not the prop the
+ * test passed in.
+ */
+function lineCommentToken(view: InstanceType<typeof EditorView>): string | undefined {
+  const data = view.state.languageDataAt<{ line?: string }>("commentTokens", 0);
+  return data[0]?.line;
+}
+
+const SCRIPT_PARAMS = internalNodeParams(SCRIPT_APP, "run");
+
+test("a — fresh mount, language unset (resolves to its declared 'javascript' default): JS default shown, JS mode, no Python mode", async () => {
+  const { container, root } = await render(SCRIPT_PARAMS, {});
+  const view = viewFor(container, "code code");
+  assert.equal(view.state.doc.toString(), JS_DEFAULT);
+  // `effective("language")` resolves the unset value through the param's own
+  // declared default ("javascript") — so JS mode, not "no mode", is what a
+  // fresh mount actually produces here.
+  assert.equal(lineCommentToken(view), "//", "language resolves through its declared default");
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("b — stays-mounted transition: switching language flips the editor's default AND its mode, on the same tree", async () => {
+  const { container, root, values } = await render(SCRIPT_PARAMS, {});
+  const before = viewFor(container, "code code");
+  assert.equal(before.state.doc.toString(), JS_DEFAULT);
+  assert.equal(lineCommentToken(before), "//");
+
+  await setLanguage(container, "python");
+
+  // Same mounted container — re-query the (possibly reconfigured, but not
+  // remounted) view to prove the transition happened live.
+  const after = viewFor(container, "code code");
+  assert.equal(after.state.doc.toString(), PYTHON_DEFAULT, "default snippet flips to Python");
+  assert.equal(lineCommentToken(after), "#", "CodeMirror's own language data now reads Python");
+
+  // ROUND 2 / B4 — the actual saved state (what `buildStep()` would persist),
+  // not just what the mounted CodeMirror doc shows.
+  assert.equal(values.current.language, "python");
+  assert.equal(
+    values.current.code,
+    PYTHON_DEFAULT,
+    "values.code (the real onChange output) must carry the swapped default too",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("c — user code survives a language switch", async () => {
+  const { container, root } = await render(SCRIPT_PARAMS, {});
+  await setCode(container, "// my own code\nreturn 42;");
+
+  await setLanguage(container, "python");
+
+  const view = viewFor(container, "code code");
+  assert.equal(
+    view.state.doc.toString(),
+    "// my own code\nreturn 42;",
+    "an entered value is never clobbered by the language-conditional default",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+// ROUND 1 — the real composition never mounts `code` with `value === undefined`.
+// `StepBuilderModal.tsx` seeds a new Script step's form from
+// `internalNodeDefaults(SCRIPT_APP, "run")`, which copies EVERY declared
+// param's `default` — including `code`'s JS boilerplate — into `values`
+// before the form ever mounts. Case (b) above (seeded with `{}`) cannot see
+// this: it must fail against the pre-B1 code and pass after.
+test("e — seeded exactly as StepBuilderModal seeds a new Script step: the JS boilerplate default still swaps to Python on a language switch", async () => {
+  const seeded = internalNodeDefaults(SCRIPT_APP, "run");
+  assert.equal(seeded.code, JS_DEFAULT, "sanity: the real seed already carries the JS boilerplate");
+
+  const { container, root, values } = await render(SCRIPT_PARAMS, seeded);
+  const before = viewFor(container, "code code");
+  assert.equal(before.state.doc.toString(), JS_DEFAULT);
+
+  await setLanguage(container, "python");
+
+  const after = viewFor(container, "code code");
+  assert.equal(
+    after.state.doc.toString(),
+    PYTHON_DEFAULT,
+    "the seeded JS boilerplate (not `undefined`) still counts as replaceable",
+  );
+  assert.equal(lineCommentToken(after), "#");
+
+  // ROUND 2 / B4 — the compound update's actual output, i.e. what a real
+  // `buildStep()`/save would persist, not just the rendered doc.
+  assert.equal(
+    values.current.code,
+    PYTHON_DEFAULT,
+    "values.code — the real saved value — must hold the Python default, not just the editor's display",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+// ROUND 2 / B5 — a solo `code` param (no `language` sibling in the form) is
+// never touched by the swap logic, even when its stored value happens to be
+// byte-identical to `PYTHON_CODE_DEFAULT`. The swap loop only ever runs
+// inside `set`'s `key === "language"` branch, which cannot fire without a
+// `language` param existing in this form — asserted directly here rather
+// than relying on absence-of-evidence.
+test("f — solo `code` param whose value happens to equal PYTHON_CODE_DEFAULT, no `language` sibling: left alone", async () => {
+  const soloCode: ActionParam = {
+    key: "code",
+    type: "code",
+    label: "Script",
+    required: true,
+    default: "return 1;",
+  };
+  const { container, root, values } = await render([soloCode], { code: PYTHON_DEFAULT });
+  const view = viewFor(container, "code code");
+  assert.equal(view.state.doc.toString(), PYTHON_DEFAULT, "stored value renders verbatim");
+  assert.equal(lineCommentToken(view), undefined, "no language extension without a sibling");
+  assert.equal(
+    values.current.code,
+    PYTHON_DEFAULT,
+    "no `language` field exists to fire `set`'s swap branch, so the value is untouched",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+// ROUND 2 / B5 — the reverse direction: python -> javascript must also swap
+// an untouched default back, not just javascript -> python.
+test("g — python → javascript: an untouched Python default swaps back to the JS default", async () => {
+  const { container, root, values } = await render(SCRIPT_PARAMS, {
+    language: "python",
+    code: PYTHON_DEFAULT,
+  });
+  const before = viewFor(container, "code code");
+  assert.equal(before.state.doc.toString(), PYTHON_DEFAULT);
+  assert.equal(lineCommentToken(before), "#");
+
+  await setLanguage(container, "javascript");
+
+  const after = viewFor(container, "code code");
+  assert.equal(after.state.doc.toString(), JS_DEFAULT, "default snippet swaps back to JS");
+  assert.equal(lineCommentToken(after), "//");
+  assert.equal(values.current.language, "javascript");
+  assert.equal(
+    values.current.code,
+    JS_DEFAULT,
+    "values.code (the real onChange output) must swap back to the JS default too",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("d — a `code` param with no `language` sibling renders exactly as today", async () => {
+  const soloCode: ActionParam = {
+    key: "code",
+    type: "code",
+    label: "Script",
+    required: true,
+    default: "return 1;",
+  };
+  const { container, root } = await render([soloCode], {});
+  const view = viewFor(container, "code code");
+  assert.equal(view.state.doc.toString(), "return 1;");
+  assert.equal(lineCommentToken(view), undefined, "no language extension without a sibling");
+  assert.equal(
+    container.querySelector('select[aria-label="Language"]'),
+    null,
+    "no Language select is synthesized",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
