@@ -164,7 +164,32 @@ export function ParamsForm({ params, values, onChange, readOnly }: ParamsFormPro
   // only fields flagged `advanced` collapse under "Additional parameters".
   const main = visible.filter((p) => p.required || !p.advanced);
   const additional = visible.filter((p) => !p.required && p.advanced);
-  const set = (key: string, value: unknown) => onChange({ ...values, [key]: value });
+  // A `language` change is the one edit that must also touch a SIBLING field:
+  // any `code` param whose currently-stored value is still untouched
+  // boilerplate (undefined, its own declared default, or the other
+  // language's hardcoded default) swaps to the new language's default, in
+  // the SAME compound `onChange` call — so there is no intermediate render
+  // with a mismatched `language`/`code` pair (D-3, ROUND 2 / B3). This is the
+  // one choke point every field edit passes through (`makeRenderOne`'s
+  // `ParamField`/`GroupField`/`RepeatField` call sites all get this same
+  // `set` as their `onChange`), so it's the right place to own the write.
+  const set = (key: string, value: unknown) => {
+    if (key === "language") {
+      const next: Record<string, unknown> = { ...values, [key]: value };
+      for (const p of flat) {
+        if (p.type !== "code") continue;
+        const current = values[p.key];
+        const isUntouchedBoilerplate =
+          current === undefined || current === p.default || current === PYTHON_CODE_DEFAULT;
+        if (isUntouchedBoilerplate) {
+          next[p.key] = value === "python" ? PYTHON_CODE_DEFAULT : p.default;
+        }
+      }
+      onChange(next);
+      return;
+    }
+    onChange({ ...values, [key]: value });
+  };
 
   if (params.length === 0) {
     return <p className="w6w-muted w6w-small">This action takes no parameters.</p>;
@@ -416,9 +441,16 @@ function ParamField({
   }
 
   // `code` — an inline script/snippet, edited in a real code editor. A sibling
-  // `language` param (if one exists in this form) drives both the editor's
-  // CodeMirror mode and — only while the user hasn't entered a value of their
-  // own (D-3) — which hardcoded default snippet is shown.
+  // `language` param (if one exists in this form) drives the editor's
+  // CodeMirror mode. The default-snippet swap itself is no longer a render-time
+  // guess (ROUND 1's approach): `ParamsForm`'s `set` (above) already writes the
+  // swapped default into `values.code` the moment `language` changes (D-3,
+  // ROUND 2 / B3), so by the time this renders, `value` is always the true
+  // saved value — this is back to the same `value ?? fallbackDefault ?? ""`
+  // shape the form used before `language` support existed, just with
+  // `fallbackDefault` following the sibling language for the one case where
+  // `value` is genuinely `undefined` (e.g. a `code` param that hasn't been
+  // touched or seeded yet).
   if (param.type === "code") {
     const siblingLanguage = effective?.("language");
     const language: ScriptLanguage | undefined =
@@ -428,18 +460,7 @@ function ParamField({
           ? "javascript"
           : undefined;
     const fallbackDefault = language === "python" ? PYTHON_CODE_DEFAULT : param.default;
-    // A `language` sibling seeds the form with the *JS* boilerplate on mount
-    // (StepBuilderModal.tsx copies every declared `default` into a new
-    // step's initial values) — so `value` is never `undefined` in the real
-    // composition. Treat that untouched boilerplate (either language's own
-    // hardcoded default) as still "replaceable" so a language switch swaps
-    // the shown snippet; anything else the user typed survives untouched.
-    // Gated on `language !== undefined` so a `code` param with no `language`
-    // sibling keeps today's exact `value ?? param.default ?? ""` behaviour.
-    const isUntouchedBoilerplate =
-      language !== undefined &&
-      (value === undefined || value === param.default || value === PYTHON_CODE_DEFAULT);
-    const current = (isUntouchedBoilerplate ? fallbackDefault : (value ?? fallbackDefault)) ?? "";
+    const current = (value ?? fallbackDefault ?? "") as string;
     return (
       <div className="w6w-field">
         <span>

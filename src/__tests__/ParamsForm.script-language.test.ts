@@ -90,21 +90,43 @@ async function settle() {
 function Harness({
   params,
   initialValues,
+  onValues,
 }: {
   params: ActionParam[];
   initialValues: Record<string, unknown>;
+  onValues?: (values: Record<string, unknown>) => void;
 }) {
   const [values, setValues] = React.useState(initialValues);
-  return React.createElement(ParamsForm, { params, values, onChange: setValues });
+  const handleChange = (next: Record<string, unknown>) => {
+    setValues(next);
+    onValues?.(next);
+  };
+  return React.createElement(ParamsForm, { params, values, onChange: handleChange });
 }
 
+/**
+ * `values` is a live box holding the LAST `onChange` call the harness actually
+ * received — the real compound-update output `ParamsForm`'s `set` hands back
+ * (what `buildStep()` would persist), not just what the mounted CodeMirror
+ * doc happens to show (ROUND 2 / B4: the doc can visually update while
+ * `values.code` itself is never written — that was the round-2 bug).
+ */
 async function render(params: ActionParam[], values: Record<string, unknown> = {}) {
   const { container, root } = mountRoot();
+  const box: { current: Record<string, unknown> } = { current: values };
   await act(async () => {
-    root.render(React.createElement(Harness, { params, initialValues: values }));
+    root.render(
+      React.createElement(Harness, {
+        params,
+        initialValues: values,
+        onValues: (next) => {
+          box.current = next;
+        },
+      }),
+    );
   });
   await settle();
-  return { container, root };
+  return { container, root, values: box };
 }
 
 /** The mounted CodeMirror view behind an element identified by its `aria-label`. */
@@ -177,7 +199,7 @@ test("a — fresh mount, language unset (resolves to its declared 'javascript' d
 });
 
 test("b — stays-mounted transition: switching language flips the editor's default AND its mode, on the same tree", async () => {
-  const { container, root } = await render(SCRIPT_PARAMS, {});
+  const { container, root, values } = await render(SCRIPT_PARAMS, {});
   const before = viewFor(container, "code code");
   assert.equal(before.state.doc.toString(), JS_DEFAULT);
   assert.equal(lineCommentToken(before), "//");
@@ -189,6 +211,15 @@ test("b — stays-mounted transition: switching language flips the editor's defa
   const after = viewFor(container, "code code");
   assert.equal(after.state.doc.toString(), PYTHON_DEFAULT, "default snippet flips to Python");
   assert.equal(lineCommentToken(after), "#", "CodeMirror's own language data now reads Python");
+
+  // ROUND 2 / B4 — the actual saved state (what `buildStep()` would persist),
+  // not just what the mounted CodeMirror doc shows.
+  assert.equal(values.current.language, "python");
+  assert.equal(
+    values.current.code,
+    PYTHON_DEFAULT,
+    "values.code (the real onChange output) must carry the swapped default too",
+  );
 
   await act(async () => {
     root.unmount();
@@ -223,7 +254,7 @@ test("e — seeded exactly as StepBuilderModal seeds a new Script step: the JS b
   const seeded = internalNodeDefaults(SCRIPT_APP, "run");
   assert.equal(seeded.code, JS_DEFAULT, "sanity: the real seed already carries the JS boilerplate");
 
-  const { container, root } = await render(SCRIPT_PARAMS, seeded);
+  const { container, root, values } = await render(SCRIPT_PARAMS, seeded);
   const before = viewFor(container, "code code");
   assert.equal(before.state.doc.toString(), JS_DEFAULT);
 
@@ -236,6 +267,71 @@ test("e — seeded exactly as StepBuilderModal seeds a new Script step: the JS b
     "the seeded JS boilerplate (not `undefined`) still counts as replaceable",
   );
   assert.equal(lineCommentToken(after), "#");
+
+  // ROUND 2 / B4 — the compound update's actual output, i.e. what a real
+  // `buildStep()`/save would persist, not just the rendered doc.
+  assert.equal(
+    values.current.code,
+    PYTHON_DEFAULT,
+    "values.code — the real saved value — must hold the Python default, not just the editor's display",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+// ROUND 2 / B5 — a solo `code` param (no `language` sibling in the form) is
+// never touched by the swap logic, even when its stored value happens to be
+// byte-identical to `PYTHON_CODE_DEFAULT`. The swap loop only ever runs
+// inside `set`'s `key === "language"` branch, which cannot fire without a
+// `language` param existing in this form — asserted directly here rather
+// than relying on absence-of-evidence.
+test("f — solo `code` param whose value happens to equal PYTHON_CODE_DEFAULT, no `language` sibling: left alone", async () => {
+  const soloCode: ActionParam = {
+    key: "code",
+    type: "code",
+    label: "Script",
+    required: true,
+    default: "return 1;",
+  };
+  const { container, root, values } = await render([soloCode], { code: PYTHON_DEFAULT });
+  const view = viewFor(container, "code code");
+  assert.equal(view.state.doc.toString(), PYTHON_DEFAULT, "stored value renders verbatim");
+  assert.equal(lineCommentToken(view), undefined, "no language extension without a sibling");
+  assert.equal(
+    values.current.code,
+    PYTHON_DEFAULT,
+    "no `language` field exists to fire `set`'s swap branch, so the value is untouched",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+// ROUND 2 / B5 — the reverse direction: python -> javascript must also swap
+// an untouched default back, not just javascript -> python.
+test("g — python → javascript: an untouched Python default swaps back to the JS default", async () => {
+  const { container, root, values } = await render(SCRIPT_PARAMS, {
+    language: "python",
+    code: PYTHON_DEFAULT,
+  });
+  const before = viewFor(container, "code code");
+  assert.equal(before.state.doc.toString(), PYTHON_DEFAULT);
+  assert.equal(lineCommentToken(before), "#");
+
+  await setLanguage(container, "javascript");
+
+  const after = viewFor(container, "code code");
+  assert.equal(after.state.doc.toString(), JS_DEFAULT, "default snippet swaps back to JS");
+  assert.equal(lineCommentToken(after), "//");
+  assert.equal(values.current.language, "javascript");
+  assert.equal(
+    values.current.code,
+    JS_DEFAULT,
+    "values.code (the real onChange output) must swap back to the JS default too",
+  );
 
   await act(async () => {
     root.unmount();
