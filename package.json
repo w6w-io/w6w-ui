@@ -63,6 +63,7 @@
     "build-storybook": "storybook build",
     "lint": "biome check .",
     "lint:tokens": "node scripts/lint-tokens.mjs",
+    "coverage:stories": "node scripts/coverage-stories.mjs",
     "format": "biome format --write ."
   },
   "peerDependencies": {
