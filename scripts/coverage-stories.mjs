@@ -1,0 +1,269 @@
+/**
+ * coverage:stories — a zero-tolerance gate: every component this package
+ * exports must ship a co-located Storybook story.
+ *
+ * Mechanism:
+ *   1. Entry points come from `package.json`'s `exports` map — every entry
+ *      whose value is an object with an `import` ending in `.ts`/`.tsx`
+ *      (today: `.`, `./flow`, `./code` → `src/index.ts`, `src/flow.ts`,
+ *      `src/code.ts`). Never hard-coded, so a fourth entrypoint is picked up
+ *      automatically.
+ *   2. Each entry file's *whole source text* is comment-stripped first — `//`
+ *      line comments and `/* … *\/` block comments are removed file-wide,
+ *      string-literal-safe (a quoted string is matched and passed through
+ *      untouched, so comment-looking text inside a real string literal is
+ *      never touched) — and only THEN is it scanned for
+ *      `export { … } from "<spec>";` blocks. Stripping first means a literal
+ *      `}` inside a comment (`// closes }`, `/* } *\/`) can never break the
+ *      block match before it even runs — matching a block body on the raw,
+ *      comment-bearing text is exactly the bug this order avoids. The block
+ *      body is still matched narrowly (`\{([^}]*)\}\s*from`) against the
+ *      stripped text, never across a `}` boundary, so a bare `export { x };`
+ *      re-export with no `from` clause can never swallow the next real block
+ *      into one junk specifier list. `export type { … }` blocks are skipped
+ *      wholesale, and an inline `type X` specifier inside an otherwise-live
+ *      block (`export { type Foo } from …`) is skipped too — neither ever
+ *      names a value, let alone a component. `A as B` exports the name `B`.
+ *      Any remaining non-`type` specifier that still doesn't parse as a bare
+ *      identifier (or `A as B`) is a hard failure — `UNPARSED <raw>` on
+ *      stdout, exit 1 — never silently dropped from the count.
+ *   3. A name counts as a component iff it is PascalCase
+ *      (`/^[A-Z][A-Za-z0-9]*$/`, so `W6WUIProvider`'s embedded digit still
+ *      matches — a naive `/^[A-Z][a-z]/` would silently drop it), contains at
+ *      least one lowercase letter (so a `SCREAMING_SNAKE` constant — which
+ *      also fails on the underscore alone — can never qualify), and is not on
+ *      the DENYLIST below.
+ *   4. Names are de-duplicated across entry points before counting — the same
+ *      symbol re-exported from two barrels (`CodeBlock`, `Copyable`,
+ *      `ExpressionOptionsProvider`) is one obligation, not two or three.
+ *   5. A component is COVERED iff `<dirname(resolved "from" path)>/<Name>
+ *      .stories.tsx` exists *and* contains `component: <Name>` as a whole
+ *      word. This is keyed on the component's own name, never on a story's
+ *      *export* name — `src/CodeBlock.stories.tsx` also exports a story
+ *      literally called `Copyable`, which must not satisfy `CodeBlock`.
+ *
+ * DENYLIST — exports that pass the PascalCase heuristic but are not
+ * components, so a bare naming rule would false-positive on them:
+ *   - "ApiError": a class (`createW6WApi.ts`), never rendered as JSX anywhere
+ *     in `src/`.
+ *
+ *   node scripts/coverage-stories.mjs           # check — see exit codes below
+ *   node scripts/coverage-stories.mjs --list     # print every component's status
+ *
+ * Exit codes:
+ *   0  every exported component has a matching, correctly-`component:`-typed
+ *      story.
+ *   1  at least one exported component has no story (or its story's `meta`
+ *      does not declare `component: <Name>`) — OR an export specifier inside
+ *      a parsed block couldn't be classified at all (`UNPARSED <raw>`): this
+ *      gate fails closed on anything it can't confidently read as a name,
+ *      rather than silently dropping it from the count.
+ *   3  unknown flag.
+ *
+ * There is deliberately no baseline file here (unlike `lint:tokens`): this is
+ * a zero-tolerance ratchet — a component either has a story or the gate
+ * fails, full stop.
+ */
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const srcDir = join(root, "src");
+const packageJsonPath = join(root, "package.json");
+
+const DENYLIST = new Map([
+  ["ApiError", "a class (createW6WApi.ts), never rendered as JSX anywhere in src/"],
+]);
+
+// Body is matched narrowly (`[^}]*`, never `[\s\S]*?` across a `}`) so a bare
+// `export { x };` re-export with no `from` clause cannot swallow the next
+// real block's specifiers into one junk list (B2).
+const EXPORT_BLOCK_RE = /export\s+(type\s+)?\{([^}]*)\}\s*from\s*(['"])([^'"]+)\3\s*;/g;
+
+// A bare identifier, optionally renamed via `A as B`. Anything that doesn't
+// match this after comments are stripped is unparseable and must fail the
+// gate rather than be silently dropped.
+const SPECIFIER_RE = /^[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?$/;
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isComponentName(name) {
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) return false;
+  if (!/[a-z]/.test(name)) return false;
+  if (DENYLIST.has(name)) return false;
+  return true;
+}
+
+// String-literal-safe, file-wide comment strip: a quoted string (single or
+// double) is matched and passed through untouched via the capture group;
+// anything else matched (a block or line comment) is replaced with "". Run
+// once against a whole entry file's source BEFORE any export-block matching,
+// so a literal `}` inside a comment (`// closes }`, `/* } */`) can never
+// break `EXPORT_BLOCK_RE`'s block match before stripping ever runs — the
+// exact ordering bug a block-scoped, post-match strip (round 1's approach)
+// could not avoid.
+const COMMENT_OR_STRING_RE = /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+
+function stripComments(source) {
+  return source.replace(COMMENT_OR_STRING_RE, (_m, str) => str ?? "");
+}
+
+/**
+ * Classify one raw (comment-stripped) specifier from inside a live export
+ * block. Returns:
+ *   null                     — blank (whitespace-only / trailing comma), not
+ *                               a specifier at all
+ *   { kind: "type" }         — an inline `type X` specifier, never a value
+ *   { kind: "value", name }  — a bare name, or the `B` of `A as B`
+ *   { kind: "unparsed" }     — doesn't match the specifier grammar at all;
+ *                               the caller must fail closed, never drop it
+ */
+function classifySpecifier(raw) {
+  const s = raw.trim();
+  if (s.length === 0) return null;
+  if (/^type\s+/.test(s)) return { kind: "type" };
+  if (!SPECIFIER_RE.test(s)) return { kind: "unparsed" };
+  const asMatch = s.match(/^(\S+)\s+as\s+(\S+)$/);
+  return { kind: "value", name: asMatch ? asMatch[2] : s };
+}
+
+/** Every entry point file from `package.json`'s `exports` map whose `import`
+ * ends in `.ts`/`.tsx` — never the three files hard-coded. */
+function entryPointFiles() {
+  const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  const files = [];
+  for (const value of Object.values(pkg.exports ?? {})) {
+    if (
+      value &&
+      typeof value === "object" &&
+      typeof value.import === "string" &&
+      /\.tsx?$/.test(value.import)
+    ) {
+      files.push(join(root, value.import));
+    }
+  }
+  return files;
+}
+
+/** Every `*.stories.tsx` file under `src/`, as absolute paths. Mirrors
+ * `scripts/lint-tokens.mjs`'s `walkScss` shape. */
+function walkStories(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...walkStories(abs));
+    } else if (entry.isFile() && entry.name.endsWith(".stories.tsx")) {
+      out.push(abs);
+    }
+  }
+  return out;
+}
+
+function toRelPosix(abs) {
+  return relative(root, abs).split("\\").join("/");
+}
+
+/** Every component this one entry file exports, as `name -> expected story
+ * path (absolute)`. De-duplication across entry files happens in the caller.
+ * Any specifier that fails to classify is pushed onto `unparsed` (relative
+ * entry path + raw text) rather than silently dropped. */
+function componentsFromEntry(entryFile, unparsed) {
+  const text = stripComments(readFileSync(entryFile, "utf8"));
+  const dir = dirname(entryFile);
+  const found = new Map();
+  for (const m of text.matchAll(EXPORT_BLOCK_RE)) {
+    const isTypeBlock = Boolean(m[1]);
+    if (isTypeBlock) continue;
+    const spec = m[4];
+    const resolvedFrom = join(dir, spec);
+    const body = m[2];
+    for (const rawSpecifier of body.split(",")) {
+      const classified = classifySpecifier(rawSpecifier);
+      if (classified === null || classified.kind === "type") continue;
+      if (classified.kind === "unparsed") {
+        unparsed.push(rawSpecifier.trim());
+        continue;
+      }
+      const { name } = classified;
+      if (!isComponentName(name)) continue;
+      if (found.has(name)) continue;
+      const storyPath = join(dirname(resolvedFrom), `${name}.stories.tsx`);
+      found.set(name, storyPath);
+    }
+  }
+  return found;
+}
+
+function usage() {
+  console.error(
+    [
+      "Usage: node scripts/coverage-stories.mjs [--list]",
+      "  (no flag)  check every exported component has a story — exit 0 clean,",
+      "             1 if any is missing",
+      "  --list     print every component's name, expected story path and",
+      "             ok|MISSING status, one per line",
+    ].join("\n"),
+  );
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const list = args.includes("--list");
+  const unknown = args.filter((a) => a !== "--list");
+  if (unknown.length > 0) {
+    usage();
+    process.exit(3);
+  }
+
+  const components = new Map();
+  const unparsed = [];
+  for (const entryFile of entryPointFiles()) {
+    for (const [name, storyPath] of componentsFromEntry(entryFile, unparsed)) {
+      if (!components.has(name)) components.set(name, storyPath);
+    }
+  }
+
+  if (unparsed.length > 0) {
+    for (const raw of unparsed) {
+      console.log(`UNPARSED ${raw}`);
+    }
+    process.exit(1);
+  }
+
+  const storyFiles = new Set(walkStories(srcDir));
+
+  const names = [...components.keys()].sort();
+  const results = names.map((name) => {
+    const storyPath = components.get(name);
+    let ok = false;
+    if (storyFiles.has(storyPath)) {
+      const content = readFileSync(storyPath, "utf8");
+      const componentRe = new RegExp(`\\bcomponent:\\s*${escapeRegExp(name)}\\b`);
+      ok = componentRe.test(content);
+    }
+    return { name, storyRel: toRelPosix(storyPath), ok };
+  });
+
+  const missing = results.filter((r) => !r.ok);
+
+  if (list) {
+    for (const r of results) {
+      console.log(`${r.name}\t${r.storyRel}\t${r.ok ? "ok" : "MISSING"}`);
+    }
+    process.exit(missing.length > 0 ? 1 : 0);
+  }
+
+  for (const m of missing) {
+    console.log(`MISSING ${m.name} — expected ${m.storyRel}`);
+  }
+  console.log(
+    `coverage:stories — ${results.length} exported components, ${results.length - missing.length} with stories, ${missing.length} missing`,
+  );
+  process.exit(missing.length > 0 ? 1 : 0);
+}
+
+main();

@@ -1,8 +1,31 @@
+import { javascript } from "@codemirror/lang-javascript";
+import { python } from "@codemirror/lang-python";
+import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
 import { useMemo } from "react";
 import { useEffectiveTheme } from "./theme.ts";
 import type { ThemeMode } from "./types.ts";
+
+/**
+ * A CodeMirror *editing* mode for `<CodeEditor>` — a distinct concept from the
+ * Prism *display-highlighting* grammar name a sibling module exports for
+ * rendered snippets. Deliberately its own type, not shared with that one.
+ */
+export type ScriptLanguage = "javascript" | "python";
+
+// Exhaustive over every `ScriptLanguage` member, with no fallback arm — a
+// third value added to the union fails to compile here instead of silently
+// falling through (house idiom, see `StepBuilderModal.tsx`'s glyph maps /
+// `doc-format.ts`'s total switch).
+function languageExtension(language: ScriptLanguage): Extension {
+  switch (language) {
+    case "javascript":
+      return javascript();
+    case "python":
+      return python();
+  }
+}
 
 export interface CodeEditorProps {
   value: string;
@@ -22,21 +45,28 @@ export interface CodeEditorProps {
    * back to `prefers-color-scheme` — same behavior as `<JsonEditor>`.
    */
   theme?: ThemeMode;
+  /**
+   * CodeMirror editing mode (syntax highlighting + language-aware editing).
+   * Omitted ⇒ today's exact plain-text behavior, unchanged.
+   */
+  language?: ScriptLanguage;
   /** Accessible label for the editor. */
   "aria-label"?: string;
 }
 
 /**
- * Plain-text code editor built on CodeMirror 6 — the same surface as
+ * Plain-text-by-default code editor built on CodeMirror 6 — the same surface as
  * `<JsonEditor>` minus JSON language/linting, for editing snippets (e.g. an
  * inline script). Line numbers, bracket matching, and `--w6w-*` theming so it
- * inherits the consumer's palette. No language pack, so it stays dependency-free
- * beyond the CodeMirror core the JSON editor already pulls in.
+ * inherits the consumer's palette. Pass `language` to opt into a CodeMirror
+ * language pack (JavaScript/Python); omit it for the original dependency-free
+ * plain-text mode.
  */
 export function CodeEditor(props: CodeEditorProps) {
   const theme = useEffectiveTheme(props.theme);
   const extensions = useMemo(
     () => [
+      ...(props.language ? [languageExtension(props.language)] : []),
       EditorView.theme({
         "&": {
           fontSize: "13px",
@@ -56,7 +86,7 @@ export function CodeEditor(props: CodeEditorProps) {
         ".cm-scroller": { overflow: "auto" },
       }),
     ],
-    [],
+    [props.language],
   );
 
   return (
