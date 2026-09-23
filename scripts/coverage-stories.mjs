@@ -8,20 +8,25 @@
  *      (today: `.`, `./flow`, `./code` → `src/index.ts`, `src/flow.ts`,
  *      `src/code.ts`). Never hard-coded, so a fourth entrypoint is picked up
  *      automatically.
- *   2. Each entry file is scanned for `export { … } from "<spec>";` blocks,
- *      including ones spanning multiple lines — but the block body is matched
- *      narrowly (`\{([^}]*)\}\s*from`), never across a `}` boundary, so a bare
- *      `export { x };` re-export with no `from` clause can never swallow the
- *      next real block into one junk specifier list. `export type { … }`
- *      blocks are skipped wholesale, and an inline `type X` specifier inside
- *      an otherwise-live block (`export { type Foo } from …`) is skipped too —
- *      neither ever names a value, let alone a component. `A as B` exports
- *      the name `B`. `//` and `/* … *\/` comments inside a block body are
- *      stripped before the body is split into specifiers, so a comment
- *      sitting next to a name never contaminates that name. Any remaining
- *      non-`type` specifier that still doesn't parse as a bare identifier (or
- *      `A as B`) is a hard failure — `UNPARSED <raw>` on stdout, exit 1 —
- *      never silently dropped from the count.
+ *   2. Each entry file's *whole source text* is comment-stripped first — `//`
+ *      line comments and `/* … *\/` block comments are removed file-wide,
+ *      string-literal-safe (a quoted string is matched and passed through
+ *      untouched, so comment-looking text inside a real string literal is
+ *      never touched) — and only THEN is it scanned for
+ *      `export { … } from "<spec>";` blocks. Stripping first means a literal
+ *      `}` inside a comment (`// closes }`, `/* } *\/`) can never break the
+ *      block match before it even runs — matching a block body on the raw,
+ *      comment-bearing text is exactly the bug this order avoids. The block
+ *      body is still matched narrowly (`\{([^}]*)\}\s*from`) against the
+ *      stripped text, never across a `}` boundary, so a bare `export { x };`
+ *      re-export with no `from` clause can never swallow the next real block
+ *      into one junk specifier list. `export type { … }` blocks are skipped
+ *      wholesale, and an inline `type X` specifier inside an otherwise-live
+ *      block (`export { type Foo } from …`) is skipped too — neither ever
+ *      names a value, let alone a component. `A as B` exports the name `B`.
+ *      Any remaining non-`type` specifier that still doesn't parse as a bare
+ *      identifier (or `A as B`) is a hard failure — `UNPARSED <raw>` on
+ *      stdout, exit 1 — never silently dropped from the count.
  *   3. A name counts as a component iff it is PascalCase
  *      (`/^[A-Z][A-Za-z0-9]*$/`, so `W6WUIProvider`'s embedded digit still
  *      matches — a naive `/^[A-Z][a-z]/` would silently drop it), contains at
@@ -92,13 +97,18 @@ function isComponentName(name) {
   return true;
 }
 
-/** Strip `//` line comments and `/* … *\/` block comments from one export
- * block's body text, before it's split into comma-separated specifiers — so
- * a comment sitting next to (or wrapping) a name never contaminates that
- * name's token (B1). Scoped to a single block body, never file-wide, so it
- * can't reach into string literals elsewhere in the file. */
-function stripComments(body) {
-  return body.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+// String-literal-safe, file-wide comment strip: a quoted string (single or
+// double) is matched and passed through untouched via the capture group;
+// anything else matched (a block or line comment) is replaced with "". Run
+// once against a whole entry file's source BEFORE any export-block matching,
+// so a literal `}` inside a comment (`// closes }`, `/* } */`) can never
+// break `EXPORT_BLOCK_RE`'s block match before stripping ever runs — the
+// exact ordering bug a block-scoped, post-match strip (round 1's approach)
+// could not avoid.
+const COMMENT_OR_STRING_RE = /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+
+function stripComments(source) {
+  return source.replace(COMMENT_OR_STRING_RE, (_m, str) => str ?? "");
 }
 
 /**
@@ -162,7 +172,7 @@ function toRelPosix(abs) {
  * Any specifier that fails to classify is pushed onto `unparsed` (relative
  * entry path + raw text) rather than silently dropped. */
 function componentsFromEntry(entryFile, unparsed) {
-  const text = readFileSync(entryFile, "utf8");
+  const text = stripComments(readFileSync(entryFile, "utf8"));
   const dir = dirname(entryFile);
   const found = new Map();
   for (const m of text.matchAll(EXPORT_BLOCK_RE)) {
@@ -170,7 +180,7 @@ function componentsFromEntry(entryFile, unparsed) {
     if (isTypeBlock) continue;
     const spec = m[4];
     const resolvedFrom = join(dir, spec);
-    const body = stripComments(m[2]);
+    const body = m[2];
     for (const rawSpecifier of body.split(",")) {
       const classified = classifySpecifier(rawSpecifier);
       if (classified === null || classified.kind === "type") continue;
