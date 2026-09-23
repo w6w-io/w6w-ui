@@ -1,3 +1,13 @@
+<p align="center">
+  <a href="https://w6w.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/w6w-lockup-ondark.svg">
+      <source media="(prefers-color-scheme: light)" srcset=".github/assets/w6w-lockup.svg">
+      <img src=".github/assets/w6w-lockup.svg" alt="W6W" width="320">
+    </picture>
+  </a>
+</p>
+
 # @w6w/ui
 
 React components for [W6W](https://w6w.io) — central API management: one front door, composition,
