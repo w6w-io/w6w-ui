@@ -1,12 +1,23 @@
 # @w6w/ui
 
-React components for [w6w](https://github.com/w6w-io), a workflow platform. Ships components used by the reference studio and available for any partner app that talks to a w6w server.
+React components for [W6W](https://w6w.io) — central API management: one front door, composition,
+visibility and plug & play for every API a product runs on. Ships the components used by the
+reference studio and available for any partner app that talks to a w6w server.
 
-## Install
+## Install / consume
 
-```sh
-npm install @w6w/ui
-```
+`@w6w/ui` is not published to npm. Pick one of two routes:
+
+- **Git dependency**: `"@w6w/ui": "github:w6w-io/w6w-ui#<commit-or-tag>"` in your `package.json` —
+  works today, the repo is public.
+- **Sibling checkout with `link:`**: vendor the repo alongside your own and depend on it as
+  `"@w6w/ui": "link:../w6w-ui"` — the same pattern this monorepo uses internally (`studio` links
+  `ui` this way).
+
+Either way, `main`/`module`/`types` and `exports` all point at `./src/index.ts` — raw `.tsx` source,
+not a pre-built `dist/` — so your bundler compiles it directly, the same as it would a sibling
+package in your own monorepo. Any modern React toolchain (Vite, Next.js, webpack +
+`ts-loader`/`babel`) handles this without extra configuration.
 
 ## Usage
 
@@ -116,6 +127,32 @@ custom properties (Sass variables would compile away before you could override t
 `.w6w-*` class names are part of the public surface, which is why this ships as one global
 stylesheet rather than CSS Modules.
 
+### Palette ancestry
+
+`@w6w/ui` compiles its own `--w6w-*` tokens from `src/styles.scss` above — branding is not a build
+dependency, so nothing here fetches or imports from another repo at build time. The values
+themselves descend from [`w6w-io/w6w-branding`](https://github.com/w6w-io/w6w-branding), the source
+palette (`tokens/tokens.json`, `BRAND.md`); a branding update is ported into `src/styles/` by hand,
+not pulled in automatically.
+
+## Components
+
+All 32 exported components, grouped by the entrypoint that exports them (see Entrypoints above):
+
+**`@w6w/ui`** — everything except the flow editor:
+`W6WUIProvider`, `AddConnectionModal`, `AppPicker`, `StepBuilderModal`, `ParamsForm`,
+`PropertyEntryForm`, `ActionTestForm`, `CodeBlock`, `JsonEditor`, `CodeEditor`, `YamlEditor`,
+`Modal`, `Copyable`, `CopyableText`, `ConfirmModal`, `AppIcon`, `ListItem`, `HealthStatusPill`,
+`AuthFieldsForm`, `ApiCallsPanel`, `UptimeStrip`, `HistoryTimeline`, `ExpressionInput`,
+`ExpressionOptionsProvider`, `IconButton`, `EditButton`, `DeleteButton`, `RepoSyncIndicator`,
+`NodeConfigForm`, `StepStatusPill`, `ExecutionLogPanel`.
+
+**`@w6w/ui/flow`** — the visual workflow editor:
+`WorkflowFlowEditor` (plus `ExpressionOptionsProvider`, re-exported from the base entrypoint above).
+
+**`@w6w/ui/code`** — the highlighter in isolation:
+`CodeBlock`, `Copyable` (both also reachable from the base entrypoint above).
+
 ## Storybook
 
 ```sh
@@ -126,8 +163,7 @@ pnpm build-storybook   # static build in storybook-static/ (gitignored)
 Stories live **beside their component** (`src/CodeBlock.stories.tsx`), never in a separate
 `stories/` tree, so one cannot drift from the other; `.storybook/main.ts` globs
 `../src/**/*.stories.tsx` and nothing else. There are deliberately no scaffolded Button/Header/Page
-examples — every entry in the sidebar is a real component of this library. Only `CodeBlock` is
-covered so far.
+examples — every entry in the sidebar is a real component of this library.
 
 The toolbar's **Theme** switch sets `data-theme` on the canvas, which is the same signal the
 components and `styles.scss` read, so a story is exercising the real theming contract. The preview
@@ -135,6 +171,23 @@ imports `src/styles.scss` (the authored source) rather than the compiled CSS, so
 under `src/styles/` hot-reloads.
 
 Stories are excluded from the published tarball (`files`) and from the `.d.ts` emit.
+
+## Develop / contribute
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, the full command list, and the rule that a
+new exported component ships with its story.
+
+## Credits
+
+Maintained by **W6W** — `w6w, Inc, a Delaware corporation`.
+[w6w.io](https://w6w.io) · [docs.w6w.io](https://docs.w6w.io)
+
+The `DeleteButton`/`EditButton` glyphs are hand-authored from [Feather](https://feathericons.com)
+(MIT, © Cole Bemis).
+
+Built with [`@xyflow/react`](https://reactflow.dev), CodeMirror (via
+[`@uiw/react-codemirror`](https://uiw-react-codemirror.vercel.app)), and
+[`prism-react-renderer`](https://github.com/FormidableLabs/prism-react-renderer).
 
 ## License
 
@@ -145,5 +198,6 @@ In plain terms: build whatever you like on these components — plugins, apps, i
 tools, client work, commercial products. The one carve-out is **Competing Use**: you may not use them
 to offer a product or service that substitutes for w6w or for something we build with them.
 
-`@w6w/expr` and `@w6w/types`, which this package depends on, stay **MIT** — the expression grammar
-and the shared model are deliberately permissive so anything can read and write w6w's formats.
+`@w6w/expr`, which this package depends on, stays **MIT** — as does `@w6w/types`, the shared model
+these components' wire types mirror (`@w6w/ui` keeps its own local copy rather than depending on it).
+Both are deliberately permissive so anything can read and write w6w's formats.
