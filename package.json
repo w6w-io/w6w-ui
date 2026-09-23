@@ -1,6 +1,6 @@
 {
   "name": "@w6w/ui",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "React components for w6w — central API management. Build plugins, apps and integrations on them; see LICENSE for the one thing you may not do.",
   "license": "SEE LICENSE IN LICENSE",
   "homepage": "https://w6w.io",
