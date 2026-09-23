@@ -1,0 +1,123 @@
+name: Release
+
+# Publishes @w6w/ui to npm — tokenless, over OIDC. No stored registry
+# credential exists in this repo, and none should ever be added: every
+# upload mints a short-lived one from the workflow's own identity. Mirrors
+# w6w-io/w6w-wrappers' release.yml, which documents this posture at length.
+#
+# THE FILENAME IS PART OF THE CREDENTIAL. Trusted publishing binds to
+# `owner/repo` PLUS this file's name. Renaming `release.yml` silently
+# invalidates the publisher registration. Don't.
+#
+# One-time setup, BEFORE the first release is ever cut:
+#   1. npmjs.com does not let a first-ever publish of a scoped package go
+#      through trusted publishing — the package has to exist first. Someone
+#      with npm publish rights to the @w6w org runs one manual
+#      `npm publish --access public` from a built `packages/ui` checkout.
+#      (Root CLAUDE.md / this session's memory: "every new @w6w/* name costs
+#      one manual publish first; never fix it with a stored CI token" — do
+#      not try to route around this step with a secret here.)
+#   2. THEN, on npmjs.com → @w6w/ui package → Settings → Trusted Publishers,
+#      add a GitHub Actions publisher: owner `w6w-io`, repository `w6w-ui`,
+#      workflow `release.yml`. No environment needed for npm (unlike PyPI).
+#   3. Also unresolved as of 2026-09-23 and NOT this workflow's job to fix:
+#      `.claude/docs/strategy/STRATEGY.md` §5.1's audit note says the
+#      `@w6w/expr` github-dependency this package carries
+#      (`github:w6w-io/w6w-core#path:packages/expr`) has a manifest/LICENSE
+#      mismatch in `core` that the doc calls "the blocker on publishing
+#      @w6w/ui to npm" — decide that in `core` before cutting the first
+#      release, not by editing this file.
+#
+# Release flow: bump the version in package.json, commit, then publish a
+# GitHub Release tagged `vX.Y.Z`. `workflow_dispatch` runs the gates and a
+# dry-run pack WITHOUT publishing — use it to check a release before cutting
+# one.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Required for OIDC. This is what replaces a stored NODE_AUTH_TOKEN.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # ── The version gate ────────────────────────────────────────────────────
+  # package.json is the only place this package's version lives (no sibling
+  # VERSION file, no lockstep across languages like wrappers has) — this job
+  # just makes sure the release tag actually agrees with it, so a release
+  # can't publish a version nobody meant to cut.
+  verify:
+    # Fork guard: this workflow reaches the real npm registry and a personal
+    # fork carries none of the secrets/trust it needs, so on `segevsh/*` it
+    # fails on every push instead of silently doing nothing. Mirrors
+    # w6w-wrappers' release.yml and this repo's own docs-dispatch.yml.
+    if: github.repository == 'w6w-io/w6w-ui'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: package.json version must match the release tag
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${TAG#v}"
+          echo "package.json: $PKG_VERSION"
+          echo "release tag:  $TAG_VERSION"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json is $PKG_VERSION, but the release tag is $TAG_VERSION"
+            exit 1
+          fi
+
+  # ── Gates + build ────────────────────────────────────────────────────────
+  test:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm check:css
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Build (also what the publish job packs)
+        run: pnpm build
+
+      - name: Dry-run pack, every release/dispatch
+        run: npm publish --dry-run
+
+  # ── npm ──────────────────────────────────────────────────────────────────
+  # npm >= 11.5.1 detects the trusted publisher itself from this job's OIDC
+  # identity — no NODE_AUTH_TOKEN anywhere. `publishConfig` in package.json
+  # is what points the published tarball's main/exports at `dist/*`; the
+  # top-level fields keep pointing at `src/*` so studio's local
+  # `link:../ui` dev flow stays a live source link, exactly as
+  # root CLAUDE.md documents — this job does not touch that.
+  npm:
+    needs: [verify, test]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+      - run: npm install --global npm@latest
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Publish @w6w/ui
+        run: npm publish --access public

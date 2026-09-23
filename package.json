@@ -1,8 +1,8 @@
 {
   "name": "@w6w/ui",
   "version": "0.0.3",
-  "description": "React components for w6w — central API management. Build plugins, apps and integrations on them; see LICENSE for the one thing you may not do.",
-  "license": "SEE LICENSE IN LICENSE",
+  "description": "React components for w6w — central API management. Build plugins, apps and integrations on them.",
+  "license": "MIT",
   "homepage": "https://w6w.io",
   "author": "W6W (https://w6w.io)",
   "bugs": "https://github.com/w6w-io/w6w-ui/issues",
@@ -41,10 +41,38 @@
   "files": [
     "src",
     "!src/**/*.stories.tsx",
+    "dist",
     "docs",
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.mjs",
+        "require": "./dist/index.cjs"
+      },
+      "./flow": {
+        "types": "./dist/flow.d.ts",
+        "import": "./dist/flow.mjs",
+        "require": "./dist/flow.cjs"
+      },
+      "./code": {
+        "types": "./dist/code.d.ts",
+        "import": "./dist/code.mjs",
+        "require": "./dist/code.cjs"
+      },
+      "./styles.css": "./src/styles.css",
+      "./code.css": "./src/code.css",
+      "./styles.scss": "./src/styles.scss",
+      "./styles/*": "./src/styles/_*.scss"
+    }
+  },
   "sideEffects": [
     "*.css",
     "*.scss"
