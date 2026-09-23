@@ -158,12 +158,19 @@ All 32 exported components, grouped by the entrypoint that exports them (see Ent
 ```sh
 pnpm storybook         # dev server on :6006
 pnpm build-storybook   # static build in storybook-static/ (gitignored)
+pnpm coverage:stories  # fail if an exported component has no story
 ```
 
 Stories live **beside their component** (`src/CodeBlock.stories.tsx`), never in a separate
 `stories/` tree, so one cannot drift from the other; `.storybook/main.ts` globs
 `../src/**/*.stories.tsx` and nothing else. There are deliberately no scaffolded Button/Header/Page
 examples — every entry in the sidebar is a real component of this library.
+
+Every component exported from the root entrypoint and from both subpaths (`@w6w/ui/flow`,
+`@w6w/ui/code`) has a co-located story. `pnpm coverage:stories` enforces this: it reads every
+component out of `package.json`'s `exports` map and fails, listing each one by name, if any has no
+matching `*.stories.tsx` — so a newly exported component that ships without a story fails the check,
+not just an existing one that loses its story.
 
 The toolbar's **Theme** switch sets `data-theme` on the canvas, which is the same signal the
 components and `styles.scss` read, so a story is exercising the real theming contract. The preview
