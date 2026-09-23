@@ -9,11 +9,19 @@
  *      `src/code.ts`). Never hard-coded, so a fourth entrypoint is picked up
  *      automatically.
  *   2. Each entry file is scanned for `export { … } from "<spec>";` blocks,
- *      including ones spanning multiple lines. `export type { … }` blocks are
- *      skipped wholesale, and an inline `type X` specifier inside an
- *      otherwise-live block (`export { type Foo } from …`) is skipped too —
+ *      including ones spanning multiple lines — but the block body is matched
+ *      narrowly (`\{([^}]*)\}\s*from`), never across a `}` boundary, so a bare
+ *      `export { x };` re-export with no `from` clause can never swallow the
+ *      next real block into one junk specifier list. `export type { … }`
+ *      blocks are skipped wholesale, and an inline `type X` specifier inside
+ *      an otherwise-live block (`export { type Foo } from …`) is skipped too —
  *      neither ever names a value, let alone a component. `A as B` exports
- *      the name `B`.
+ *      the name `B`. `//` and `/* … *\/` comments inside a block body are
+ *      stripped before the body is split into specifiers, so a comment
+ *      sitting next to a name never contaminates that name. Any remaining
+ *      non-`type` specifier that still doesn't parse as a bare identifier (or
+ *      `A as B`) is a hard failure — `UNPARSED <raw>` on stdout, exit 1 —
+ *      never silently dropped from the count.
  *   3. A name counts as a component iff it is PascalCase
  *      (`/^[A-Z][A-Za-z0-9]*$/`, so `W6WUIProvider`'s embedded digit still
  *      matches — a naive `/^[A-Z][a-z]/` would silently drop it), contains at
@@ -41,7 +49,10 @@
  *   0  every exported component has a matching, correctly-`component:`-typed
  *      story.
  *   1  at least one exported component has no story (or its story's `meta`
- *      does not declare `component: <Name>`).
+ *      does not declare `component: <Name>`) — OR an export specifier inside
+ *      a parsed block couldn't be classified at all (`UNPARSED <raw>`): this
+ *      gate fails closed on anything it can't confidently read as a name,
+ *      rather than silently dropping it from the count.
  *   3  unknown flag.
  *
  * There is deliberately no baseline file here (unlike `lint:tokens`): this is
@@ -60,7 +71,15 @@ const DENYLIST = new Map([
   ["ApiError", "a class (createW6WApi.ts), never rendered as JSX anywhere in src/"],
 ]);
 
-const EXPORT_BLOCK_RE = /export\s+(type\s+)?\{([\s\S]*?)\}\s*from\s*(['"])([^'"]+)\3\s*;/g;
+// Body is matched narrowly (`[^}]*`, never `[\s\S]*?` across a `}`) so a bare
+// `export { x };` re-export with no `from` clause cannot swallow the next
+// real block's specifiers into one junk list (B2).
+const EXPORT_BLOCK_RE = /export\s+(type\s+)?\{([^}]*)\}\s*from\s*(['"])([^'"]+)\3\s*;/g;
+
+// A bare identifier, optionally renamed via `A as B`. Anything that doesn't
+// match this after comments are stripped is unparseable and must fail the
+// gate rather than be silently dropped.
+const SPECIFIER_RE = /^[A-Za-z_$][\w$]*(?:\s+as\s+[A-Za-z_$][\w$]*)?$/;
 
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -73,15 +92,32 @@ function isComponentName(name) {
   return true;
 }
 
-/** `A as B` exports the name `B`; a leading `type ` specifier is skipped
- * (returns null); everything else is the bare specifier name. */
-function specifierName(raw) {
+/** Strip `//` line comments and `/* … *\/` block comments from one export
+ * block's body text, before it's split into comma-separated specifiers — so
+ * a comment sitting next to (or wrapping) a name never contaminates that
+ * name's token (B1). Scoped to a single block body, never file-wide, so it
+ * can't reach into string literals elsewhere in the file. */
+function stripComments(body) {
+  return body.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+}
+
+/**
+ * Classify one raw (comment-stripped) specifier from inside a live export
+ * block. Returns:
+ *   null                     — blank (whitespace-only / trailing comma), not
+ *                               a specifier at all
+ *   { kind: "type" }         — an inline `type X` specifier, never a value
+ *   { kind: "value", name }  — a bare name, or the `B` of `A as B`
+ *   { kind: "unparsed" }     — doesn't match the specifier grammar at all;
+ *                               the caller must fail closed, never drop it
+ */
+function classifySpecifier(raw) {
   const s = raw.trim();
   if (s.length === 0) return null;
-  if (/^type\s+/.test(s)) return null;
-  const asMatch = s.match(/^\S+\s+as\s+(\S+)$/);
-  if (asMatch) return asMatch[1];
-  return s;
+  if (/^type\s+/.test(s)) return { kind: "type" };
+  if (!SPECIFIER_RE.test(s)) return { kind: "unparsed" };
+  const asMatch = s.match(/^(\S+)\s+as\s+(\S+)$/);
+  return { kind: "value", name: asMatch ? asMatch[2] : s };
 }
 
 /** Every entry point file from `package.json`'s `exports` map whose `import`
@@ -122,8 +158,10 @@ function toRelPosix(abs) {
 }
 
 /** Every component this one entry file exports, as `name -> expected story
- * path (absolute)`. De-duplication across entry files happens in the caller. */
-function componentsFromEntry(entryFile) {
+ * path (absolute)`. De-duplication across entry files happens in the caller.
+ * Any specifier that fails to classify is pushed onto `unparsed` (relative
+ * entry path + raw text) rather than silently dropped. */
+function componentsFromEntry(entryFile, unparsed) {
   const text = readFileSync(entryFile, "utf8");
   const dir = dirname(entryFile);
   const found = new Map();
@@ -132,9 +170,15 @@ function componentsFromEntry(entryFile) {
     if (isTypeBlock) continue;
     const spec = m[4];
     const resolvedFrom = join(dir, spec);
-    for (const rawSpecifier of m[2].split(",")) {
-      const name = specifierName(rawSpecifier);
-      if (name === null) continue;
+    const body = stripComments(m[2]);
+    for (const rawSpecifier of body.split(",")) {
+      const classified = classifySpecifier(rawSpecifier);
+      if (classified === null || classified.kind === "type") continue;
+      if (classified.kind === "unparsed") {
+        unparsed.push(rawSpecifier.trim());
+        continue;
+      }
+      const { name } = classified;
       if (!isComponentName(name)) continue;
       if (found.has(name)) continue;
       const storyPath = join(dirname(resolvedFrom), `${name}.stories.tsx`);
@@ -166,10 +210,18 @@ function main() {
   }
 
   const components = new Map();
+  const unparsed = [];
   for (const entryFile of entryPointFiles()) {
-    for (const [name, storyPath] of componentsFromEntry(entryFile)) {
+    for (const [name, storyPath] of componentsFromEntry(entryFile, unparsed)) {
       if (!components.has(name)) components.set(name, storyPath);
     }
+  }
+
+  if (unparsed.length > 0) {
+    for (const raw of unparsed) {
+      console.log(`UNPARSED ${raw}`);
+    }
+    process.exit(1);
   }
 
   const storyFiles = new Set(walkStories(srcDir));
