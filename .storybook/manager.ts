@@ -13,6 +13,8 @@ addons.setConfig({
     base: "light",
     brandTitle: "@w6w/ui",
     brandUrl: "https://w6w.io",
+    brandImage:
+      "https://raw.githubusercontent.com/w6w-io/w6w-branding/main/logo/svg/w6w-lockup.svg",
     colorPrimary: "#3355E6",
     colorSecondary: "#3355E6",
   }),
