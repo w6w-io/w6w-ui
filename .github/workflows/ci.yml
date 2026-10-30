@@ -43,39 +43,5 @@ jobs:
           cache-dependency-path: ui/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm check:css
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-      - name: Pack with pnpm
-        run: |
-          mkdir -p "$RUNNER_TEMP/pack"
-          pnpm pack --pack-destination "$RUNNER_TEMP/pack"
-      - name: Assert the packed manifest
-        run: node scripts/assert-packed-manifest.mjs "$RUNNER_TEMP"/pack/w6w-ui-*.tgz
-
-  # release.yml's clean-consumer smoke installs @w6w/expr FROM NPM, not from the sibling checkout.
-  # A ui change that needs an expr version nobody has published passes every gate above and then
-  # fails the release. This job says so on the PR: publish expr (core's publish-expr.yml) first.
-  npm-deps-published:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - name: Every @w6w/* dependency range resolves on npm
-        run: |
-          rc=0
-          for dep in $(node -p "Object.keys(require('./package.json').dependencies ?? {}).filter(d => d.startsWith('@w6w/')).join(' ')"); do
-            range="$(node -p "require('./package.json').dependencies['$dep']")"
-            got="$(npm view "$dep@$range" version 2>/dev/null | tail -n 1)"
-            if [ -z "$got" ]; then
-              echo "::error::$dep@$range is not on npm. Publish it before releasing @w6w/ui."
-              rc=1
-            else
-              echo "ok $dep@$range -> $got"
-            fi
-          done
-          exit $rc
+      # Every check lives in scripts/verify.sh, which the pre-push hook also runs.
+      - run: bash scripts/verify.sh

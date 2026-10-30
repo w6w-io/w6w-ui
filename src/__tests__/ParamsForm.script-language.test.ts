@@ -140,18 +140,37 @@ function viewFor(container: Element, ariaLabel: string) {
 }
 
 // `@uiw/react-codemirror`'s controlled-`value` sync defers an external
-// overwrite while its own 200ms "isTyping" latch is live (so a controlled
-// re-render mid-keystroke doesn't fight the user) — matched here so a
-// subsequent action (e.g. a language switch) exercises the real steady-state
-// sync path rather than racing that debounce window.
-const CODEMIRROR_TYPING_LATCH_MS = 200;
+// overwrite while its "isTyping" latch is live (so a controlled re-render
+// mid-keystroke doesn't fight the user) — waited out here so a subsequent
+// action (e.g. a language switch) exercises the real steady-state sync path
+// rather than racing that debounce window. The latch is NOT wall-clock: it
+// expires after 200 ticks of a `setInterval(…, 1)` (`TimeoutLatch` in the
+// library's `timeoutLatch.js`), and a loaded CI runner fires that interval far
+// less than once a millisecond — a fixed 250ms sleep left it live and the
+// language switch's swap deferred past the assertion. So count ticks of our
+// own 1ms interval instead: it is registered after the latch's, so Node runs
+// the latch's tick first on every loop turn, and outlasting it in ticks means
+// the latch has expired however slow the machine is.
+const CODEMIRROR_TYPING_LATCH_TICKS = 200;
+
+function intervalTicks(n: number) {
+  return new Promise<void>((resolve) => {
+    let ticks = 0;
+    const id = setInterval(() => {
+      if (++ticks >= n) {
+        clearInterval(id);
+        resolve();
+      }
+    }, 1);
+  });
+}
 
 /** Replace the `code` editor's whole document — the real `onChange` wiring fires from this. */
 async function setCode(container: Element, text: string) {
   const view = viewFor(container, "code code");
   await act(async () => {
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
-    await new Promise((r) => setTimeout(r, CODEMIRROR_TYPING_LATCH_MS + 50));
+    await intervalTicks(CODEMIRROR_TYPING_LATCH_TICKS + 50);
   });
 }
 
