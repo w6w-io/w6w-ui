@@ -10,6 +10,11 @@ import type { ExpressionOptions, ExpressionStepSource } from "./ExpressionOption
 import { IconButton } from "./IconButton.tsx";
 import { Modal } from "./Modal.tsx";
 import {
+  authoredReferences,
+  compileAuthoredParts,
+  previewAuthoredParts,
+} from "./expression-authoring.ts";
+import {
   chipToText,
   ensureFillerBreak,
   insertNodeAtCaret,
@@ -26,7 +31,6 @@ import {
 import {
   parseRootAnchoredTemplate,
   partsToValue,
-  renderResult,
   serializeTemplate,
   valueToParts,
 } from "./expression-template.ts";
@@ -202,7 +206,10 @@ export function ExpressionEditorModal({
     });
     view.focus();
   };
-  const [parts, setParts] = useState<ExprPart[]>(() => valueToParts(value).parts);
+  const [parts, setParts] = useState<ExprPart[]>(
+    () => compileAuthoredParts(valueToParts(value).parts, options).parts,
+  );
+  const authored = useMemo(() => compileAuthoredParts(parts, options), [parts, options]);
   // Bumped ONLY for programmatic repaints — mount, and committing template
   // text back into chips. Typing/insert mutate the DOM directly and sync out,
   // so the caret is never clobbered; NEVER bump this from `onInput`,
@@ -279,21 +286,16 @@ export function ExpressionEditorModal({
   // caret position is moot there) and `true` for a caller that wants the
   // caret restored into the chips editor after the repaint.
   const adoptText = (text: string, { restoreFocus }: { restoreFocus: boolean }) => {
-    setParts(parseRootAnchoredTemplate(text));
+    setParts(compileAuthoredParts(parseRootAnchoredTemplate(text), options).parts);
     if (restoreFocus) focusChipsAfterPaint.current = true;
     setPaintGen((g) => g + 1);
   };
 
   const save = () => {
     const el = editorRef.current;
-    onSave?.(partsToValue(el ? readParts(el) : parts));
-    onClose();
-  };
-
-  // Save `part` alone as the field's value (what Save yields for an editor
-  // holding only that chip) and close. Expression mode only.
-  const saveOnly = (part: ExprPart) => {
-    onSave?.(partsToValue([part]));
+    const next = compileAuthoredParts(el ? readParts(el) : parts, options);
+    if (next.error) return;
+    onSave?.(partsToValue(next.parts));
     onClose();
   };
 
@@ -382,7 +384,7 @@ export function ExpressionEditorModal({
   const eventFields = (options.eventOutputs ?? []).filter((o) =>
     o.path ? isRefSafePath(o.key) : isRefSafeKey(o.key),
   );
-  const template = serializeTemplate(parts);
+  const template = serializeTemplate(authored.parts);
 
   // The sample map the Result pane previews against: host-seeded defaults
   // (real project vars/documents, keyed by full ref) overlaid by anything the
@@ -402,33 +404,18 @@ export function ExpressionEditorModal({
   // ref belongs here too — otherwise the Sample-values box never offers a row
   // for it and the Result pane's first click on the new insert-render action
   // reads as broken (blank output).
-  const usedRefs = useMemo(() => {
-    const seen = new Set<string>();
-    const refs: string[] = [];
-    for (const p of parts) {
-      if ((p.kind === "var" || p.kind === "render") && p.ref && !seen.has(p.ref)) {
-        seen.add(p.ref);
-        refs.push(p.ref);
-      }
-    }
-    return refs;
-  }, [parts]);
+  const usedRefs = useMemo(() => authoredReferences(authored.parts), [authored.parts]);
 
-  // Best-effort client-side preview of the expression against the sample values.
-  // Follow-up: `@w6w/expr` is now a dependency of this package, but the
-  // preview does not call it yet, so inline JSONLogic (`expr` parts) isn't
-  // evaluated client-side — we render the resolved `{{ }}` template instead:
-  // substitute sample values for var refs, mask secrets, and keep the
-  // `{{ … }}` form for anything we can't resolve. Never throws on an
-  // un-evaluable expression.
+  // Comparisons use the same JSONLogic evaluator as execution, with typed samples.
   const result = useMemo(() => {
+    if (authored.error) return "";
     try {
-      return renderResult(parts, effectiveSamples);
+      return previewAuthoredParts(authored.parts, options.sampleValues, samples);
     } catch {
       // Last-resort fallback — the pane must never throw.
       return template;
     }
-  }, [parts, effectiveSamples, template]);
+  }, [authored, options.sampleValues, samples, template]);
 
   // Which non-fresh tiers the Result's substituted values came from (a value the author typed
   // into the Sample values box overrides the tier and is not noted).
@@ -446,16 +433,13 @@ export function ExpressionEditorModal({
   // `sigil: null` drops the glyph — a step row with fields renders its own
   // disclosure caret in that spot instead (see the Previous steps loop).
   //
-  // A LEAF row's click saves that single ref as if it were the only thing in
-  // the editor and Save were pressed; a COMPOSITE row (it has a disclosure for
-  // child rows) keeps the old click = insert into the editor. Every row also
-  // carries a copy icon at its right that keeps the old insert-and-stay-open.
+  // Every source inserts and keeps the editor open so authors can append a comparison.
   const source = (
     label: string,
     part: ExprPart,
     cls: string,
     sigil: string | null,
-    composite = false,
+    _composite = false,
     ariaLabel?: string,
     // `name` replaces `label` in the tooltip (a tree row shows a short label but
     // names its full ref on hover); `depth` indents a tree row.
@@ -476,14 +460,10 @@ export function ExpressionEditorModal({
         type="button"
         className={`w6w-exprmodal-source ${cls}${tree?.declaredOnly ? " is-declared-only" : ""}`}
         style={{ flex: 1, minWidth: 0, ...(tree?.declaredOnly ? { opacity: 0.6 } : {}) }}
-        title={`${composite || jsonBinding ? "Insert" : "Use"} ${tree?.name ?? label}`}
+        title={`Insert ${tree?.name ?? label}`}
         aria-label={ariaLabel}
         onClick={() =>
-          jsonBinding
-            ? part.kind === "var" && insertJsonRef(part.ref ?? "")
-            : composite
-              ? insertPart(part)
-              : saveOnly(part)
+          jsonBinding ? part.kind === "var" && insertJsonRef(part.ref ?? "") : insertPart(part)
         }
       >
         {sigil !== null && <span className="w6w-expr-chip-sigil">{sigil}</span>}
@@ -692,7 +672,13 @@ export function ExpressionEditorModal({
             <button type="button" className="w6w-btn w6w-btn-ghost" onClick={onClose}>
               Cancel
             </button>
-            <button type="button" className="w6w-btn" onClick={save}>
+            <button
+              type="button"
+              className="w6w-btn"
+              onClick={save}
+              data-testid="expr-save"
+              disabled={authored.error !== null}
+            >
               Save
             </button>
           </div>
@@ -1186,7 +1172,9 @@ export function ExpressionEditorModal({
                 tabIndex={0}
                 aria-multiline={multiline ? "true" : "false"}
                 aria-label="Expression"
-                data-placeholder="Type text and insert {x} variables, 🔒 secrets, or ▸ step outputs…"
+                data-placeholder='Pick a field, then type == "value"'
+                aria-invalid={authored.error !== null}
+                aria-describedby={authored.error ? "expression-problem" : undefined}
                 spellCheck={false}
                 onInput={() => {
                   // D-3: promote a just-closed `{{ … }}` marker to a chip AT
@@ -1313,6 +1301,15 @@ export function ExpressionEditorModal({
                   sync();
                 }}
               />
+              <span className="w6w-muted w6w-small">
+                Pick a field, then type <code>== "value"</code>. Combine conditions with{" "}
+                <code>&amp;&amp;</code> or <code>||</code>. Double-click a chip to edit it.
+              </span>
+              {authored.error && (
+                <span id="expression-problem" role="alert" className="w6w-error">
+                  {authored.error}
+                </span>
+              )}
             </div>
             {usedRefs.length > 0 && (
               <div className="w6w-exprmodal-preview">
@@ -1328,7 +1325,7 @@ export function ExpressionEditorModal({
                     <span>{ref}</span>
                     <input
                       type="text"
-                      value={samples[ref] ?? ""}
+                      value={samples[ref] ?? effectiveSamples[ref] ?? ""}
                       placeholder="sample value"
                       onChange={(e) => setSamples((s) => ({ ...s, [ref]: e.target.value }))}
                     />

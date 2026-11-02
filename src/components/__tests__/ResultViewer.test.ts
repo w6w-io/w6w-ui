@@ -66,13 +66,13 @@ function stubClipboard() {
   return calls;
 }
 
-async function mount(value: unknown) {
+async function mount(value: unknown, format?: "auto" | "json") {
   const container = document.getElementById("root");
   assert.ok(container);
   container.innerHTML = "";
   const root = createRoot(container);
   await act(async () => {
-    root.render(React.createElement(ResultViewer, { value }));
+    root.render(React.createElement(ResultViewer, { value, format }));
   });
   return { container, root };
 }
@@ -100,6 +100,19 @@ function openStates(container: HTMLElement): boolean[] {
 
 const HTML_PAYLOAD =
   "<!doctype html><html><body><h1>vendor page</h1><script>window.__pwned=1</script></body></html>";
+
+test("explicit JSON format preserves root strings and copies the exact JSON value", async () => {
+  for (const value of [HTML_PAYLOAD, '{"value":123}', "# Heading", "", null, false, 0]) {
+    const calls = stubClipboard();
+    const { container, root } = await mount(value, "json");
+    assert.ok(container.querySelector('[data-format="json"]'));
+    assert.equal(container.querySelector("iframe"), null);
+    assert.equal(container.querySelector(".w6w-json-leaf")?.textContent, JSON.stringify(value));
+    await click(container.querySelector('[aria-label="Copy result"]') as Element);
+    assert.deepEqual(calls, [JSON.stringify(value)]);
+    await act(async () => root.unmount());
+  }
+});
 
 test("R1 — json: 3 nodes, depth-2 open, collapsed text still in the DOM", async () => {
   const { container, root } = await mount({ a: { b: { c: "deep-leaf" } }, n: 1 });

@@ -173,10 +173,11 @@ test("R0 - the item keys nest under Current item, collapsed until its 'N fields'
     FIELDS,
   );
   await click(loopBtn(m.container, "price"));
+  await click(m.container.querySelector('[data-testid="expr-save"]') as Element);
   assert.deepEqual(m.onSaveCalls, ["{{ foreach.item.price }}"]);
 });
 
-test("R1 - Loop group: Current item, its fields, Index; each click saves its ref", async () => {
+test("R1 - Loop group: Current item, its fields, Index; each inserts its ref for Save", async () => {
   const p = proj(testOutputs);
   assert.equal(p.loop?.itemOutputs?.length, 4);
   const labels = ["Current item", ...FIELDS, "Index"];
@@ -186,6 +187,7 @@ test("R1 - Loop group: Current item, its fields, Index; each click saves its ref
     await click(loopToggle(m.container));
     assert.deepEqual(loopLabels(m.container), labels);
     await click(loopBtn(m.container, label));
+    await click(m.container.querySelector('[data-testid="expr-save"]') as Element);
     assert.deepEqual(m.onSaveCalls, [`{{ ${refs[i]} }}`], label);
   }
 });
@@ -203,6 +205,7 @@ test("R1b - a For each's saved Test sample lists the item keys when nothing upst
   await click(loopToggle(m.container));
   assert.deepEqual(loopLabels(m.container), labels);
   await click(loopBtn(m.container, "title"));
+  await click(m.container.querySelector('[data-testid="expr-save"]') as Element);
   assert.deepEqual(m.onSaveCalls, ["{{ foreach.item.title }}"]);
 });
 

@@ -11,6 +11,8 @@ export interface ResultViewerProps {
    *  response body string. The format is sniffed from this ROOT value only
    *  (`detectResultFormat`); string leaves inside a JSON tree stay text. */
   value: unknown;
+  /** Keep an already-parsed payload as JSON, including strings; default sniffs the format. */
+  format?: "auto" | "json";
   /** Height cap of the scrolling body, in px. Default 320. */
   maxHeight?: number;
   /** Extra class on the root, for spacing in the consuming pane. */
@@ -83,10 +85,14 @@ function renderSource(text: string, language: "markup" | "markdown"): ReactNode 
  * still renders and the button writes a best-effort string instead.
  */
 export function ResultViewer(props: ResultViewerProps) {
-  const { value, maxHeight = 320, className } = props;
+  const { value, format = "auto", maxHeight = 320, className } = props;
   // Sniffed once per value: the format decides both the body and the bar, and
   // re-sniffing on every unrelated re-render would re-parse a big string.
-  const d = useMemo(() => detectResultFormat(value), [value]);
+  const d = useMemo(
+    () =>
+      format === "json" ? { format: "json" as const, data: value } : detectResultFormat(value),
+    [value, format],
+  );
 
   const [mode, setMode] = useState<Mode>("rendered");
   // JSON only: the open depth Expand all / Collapse all switch to, plus the

@@ -190,10 +190,11 @@ test("Send Confirmation: the picker at Get entry lists state.order and its field
   assert.equal(some.length, 1, String(some));
   assert.ok(some[0]?.includes("state.order.total"), String(some[0]));
 
-  // Picking a field saves the `state.<path>` ref.
+  // Picking a field inserts the `state.<path>` ref, committed with Save.
   await click(group.querySelector('[data-testid="expr-section-toggle"]') as Element);
   const idRow = rows.find((r) => r.getAttribute("title")?.endsWith("state.order.id")) as Element;
   await click(idRow);
+  await click(container.querySelector('[data-testid="expr-save"]') as Element);
   assert.deepEqual(onSaveCalls[0], "{{ state.order.id }}");
   await act(async () => root.unmount());
 });

@@ -1,4 +1,4 @@
-import { type CoalesceChain, parseCoalesceChain } from "@w6w/expr";
+import { type CoalesceChain, formatReadableExpression, parseCoalesceChain } from "@w6w/expr";
 import type { ExprPart } from "../types.ts";
 import { parseRootAnchoredTemplate, serializeTemplate } from "./expression-template.ts";
 
@@ -212,8 +212,9 @@ export function makeChip(
       label.textContent = chainLabel(chain);
       span.title = `Expression: ${serializeTemplate([part])}`;
     } else {
-      label.textContent = raw.length > 24 ? `${raw.slice(0, 24)}…` : raw || "expr";
-      span.title = `Expression: ${raw}`;
+      const readable = formatReadableExpression(part.expr, varLabel);
+      label.textContent = readable ?? (raw.length > 24 ? `${raw.slice(0, 24)}…` : raw || "expr");
+      span.title = `Expression: ${readable ?? raw}`;
     }
   }
 
@@ -593,7 +594,11 @@ export function promoteCompletedMarkerAtCaret(
 export function chipToText(chip: HTMLElement): Text | null {
   const part = chipToPart(chip);
   if (!part) return null;
-  const text = chip.ownerDocument.createTextNode(serializeTemplate([part]));
+  const readable =
+    part.kind === "expr" && !parseCoalesceChain(part.expr)
+      ? formatReadableExpression(part.expr)
+      : null;
+  const text = chip.ownerDocument.createTextNode(readable ?? serializeTemplate([part]));
   chip.replaceWith(text);
   return text;
 }

@@ -226,7 +226,7 @@ test("a field row shows only its own name, indents under its parent and keeps th
     rows.map((b) => b.textContent),
     ["event", "name"],
   );
-  assert.equal(rows[1].title, "Use conv.event.name");
+  assert.equal(rows[1].title, "Insert conv.event.name");
   assert.equal((rows[1].parentElement as HTMLElement).style.paddingLeft, "14px");
   assert.equal(rows[0].classList.contains("w6w-expr-chip-var"), false, "a field is not a chip");
   const editor = container.querySelector(".w6w-exprmodal-chips") as HTMLElement;
@@ -333,7 +333,7 @@ for (const mode of ["expression", "json-binding"] as const) {
   }
 }
 
-test("trigger.event lists the app trigger's declared fields; each saves trigger.event.<key>", async () => {
+test("trigger.event lists the app trigger's declared fields as insertable references", async () => {
   const { container } = await mountModal({
     options: {
       hasTrigger: true,
@@ -354,7 +354,10 @@ test("trigger.event lists the app trigger's declared fields; each saves trigger.
   const titles = Array.from(box.querySelectorAll(".w6w-exprmodal-source")).map(
     (b) => (b as HTMLElement).title,
   );
-  assert.deepEqual(titles, ["Use trigger.event.order_id", "Use trigger.event.attendees.0.email"]);
+  assert.deepEqual(titles, [
+    "Insert trigger.event.order_id",
+    "Insert trigger.event.attendees.0.email",
+  ]);
 });
 
 test("Result names the tier of a sample- or persisted-sourced value, nothing for fresh", async () => {

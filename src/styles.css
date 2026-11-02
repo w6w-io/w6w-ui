@@ -5215,6 +5215,12 @@ dialog.w6w-modal.w6w-modal-fullscreen .w6w-modal-header {
 .w6w-execution-log-json {
   min-width: 0;
 }
+.w6w-execution-log-json > summary {
+  cursor: pointer;
+}
+.w6w-execution-log-json > .w6w-result-viewer {
+  margin-top: var(--w6w-sp-2);
+}
 
 /* Error blocks (step `error`, run `runError`/`stepErrors`). The box itself is
    `.w6w-result.w6w-error` (`_tester.scss`) — TriggerFillForm's StepError

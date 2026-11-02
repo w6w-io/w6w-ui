@@ -89,6 +89,7 @@
     "test:canvas-layer": "bash test/canvas-layer/run.sh",
     "test:foreach-loop": "bash test/foreach-loop/run.sh",
     "test:expr-template": "bash test/expr-template/run.sh",
+    "test:friendly-expressions": "node test/friendly-expressions/run.mjs",
     "test:action-test-form": "bash test/action-test-form/run.sh",
     "test:host-isolation": "bash test/host-isolation/run.sh",
     "test:copyable": "bash test/copyable/run.sh",

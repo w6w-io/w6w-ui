@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { ExprValue, SecretValue } from "../types.ts";
 import { ExpressionEditorModal } from "./ExpressionEditorModal.tsx";
 import { useExpressionOptions } from "./ExpressionOptions.tsx";
+import { compileAuthoredParts } from "./expression-authoring.ts";
 import {
   chipToText,
   ensureFillerBreak,
@@ -91,7 +92,8 @@ export function ExpressionInput({
     if (!el) return;
     const next = readParts(el);
     setState((s) => ({ ...s, parts: next }));
-    onChange(partsToValue(next));
+    const authored = compileAuthoredParts(next, resolved);
+    onChange(partsToValue(authored.parts));
   };
 
   // A masked field must never leave clear text: seal a plain typed value into a

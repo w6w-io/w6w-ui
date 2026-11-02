@@ -95,8 +95,7 @@ const click = async (el: Element) => {
   });
 };
 
-// A leaf row's own click now saves+closes; the icon beside it keeps the old
-// insert-into-editor behaviour (T-2).
+// Both a source row and its icon insert into the editor without closing it.
 const copyOf = (srcBtn: Element) =>
   srcBtn.parentElement?.querySelector('[data-testid="expr-copy-to-editor"]') as Element;
 
@@ -263,9 +262,9 @@ test("A3 — no toggle without children: a document with no fields and a step wi
   assert.deepEqual(refs, ["documents.doc1", "nodes.st1.output"]);
 });
 
-// ── T-2 — leaf row click = save + close; icon = insert only ────────────────
+// ── Source clicks leave room to compose a comparison ─────────────────────
 
-test("T-2 — a scalar row click saves that single ref (as Save would) and closes, without touching the editor", async () => {
+test("a scalar row inserts its reference and stays open until Save", async () => {
   const { container, onSaveCalls, onCloseCalls } = await mountModal({
     options: { vars: ["v1"] },
   });
@@ -273,10 +272,14 @@ test("T-2 — a scalar row click saves that single ref (as Save would) and close
   const btn = groupFor(container, "Variables")?.querySelector(".w6w-exprmodal-source") as Element;
   assert.ok(btn);
   await click(btn);
+  assert.equal(onSaveCalls.length, 0);
+  assert.equal(onCloseCalls.length, 0);
+  assert.equal(editor.querySelector(".w6w-expr-chip")?.getAttribute("data-ref"), "var.v1");
+  await click(container.querySelector('[data-testid="expr-save"]') as Element);
   assert.equal(onSaveCalls.length, 1);
   assert.deepEqual(onSaveCalls[0], "{{ var.v1 }}");
   assert.equal(onCloseCalls.length, 1);
-  assert.equal(editor.querySelectorAll(".w6w-expr-chip").length, 0);
+  assert.equal(editor.querySelectorAll(".w6w-expr-chip").length, 1);
 });
 
 test("T-2 — the 'Copy to expression editor' icon inserts a chip, stays open, and does not save", async () => {

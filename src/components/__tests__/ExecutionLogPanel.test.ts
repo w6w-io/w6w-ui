@@ -111,6 +111,18 @@ async function openDetailsAt(container: HTMLElement, index: number) {
   });
 }
 
+async function openPayload(container: HTMLElement, title: string) {
+  const details = Array.from(
+    container.querySelectorAll<HTMLDetailsElement>("details.w6w-execution-log-json"),
+  ).find((element) => element.querySelector("summary")?.textContent === title);
+  assert.ok(details, `expected the ${title} disclosure`);
+  await act(async () => {
+    details.querySelector("summary")?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  return details;
+}
+
 const ALL_STATES: StepStatus[] = ["pending", "running", "succeeded", "failed", "skipped"];
 const DEFAULT_LABELS: Record<StepStatus, string> = {
   pending: "Pending",
@@ -301,14 +313,27 @@ test("A1/M1 — a step with input/output starts with no `open` attribute on its 
   );
 });
 
-test("A3 — input/output render through CodeBlock's structured idiom once opened, never a bare w6w-result <pre> dump", async () => {
+test("input and output start collapsed independently and open as foldable JSON", async () => {
   const { container, root } = await mountPanel({ steps: [RUN_LONGER] });
   await openDetailsAt(container, 0);
+  const payloads = Array.from(
+    container.querySelectorAll<HTMLDetailsElement>("details.w6w-execution-log-json"),
+  );
+  assert.equal(payloads.length, 2);
+  assert.ok(payloads.every((details) => !details.open));
+  assert.equal(container.querySelector(".w6w-result-viewer"), null);
+  const input = await openPayload(container, "Input");
+  assert.ok(input.querySelector(".w6w-json-node"));
+  assert.equal(payloads[1].open, false);
+  assert.ok(!container.textContent?.includes("abc123"), "Output stays unmounted");
+  await openPayload(container, "Output");
   const html = container.innerHTML;
   await act(async () => {
     root.unmount();
   });
-  assert.match(html, /w6w-code-block/, "expected CodeBlock's own className to appear");
+  assert.match(html, /w6w-result-viewer/, "expected the shared JSON viewer");
+  assert.match(html, /Expand all/);
+  assert.match(html, /Collapse all/);
   assert.doesNotMatch(
     html,
     /class="w6w-result"/,
@@ -318,11 +343,15 @@ test("A3 — input/output render through CodeBlock's structured idiom once opene
   assert.match(html, /abc123/, "the output value must actually be rendered");
 });
 
-test("A5/M2 — a collapsed row renders no CodeBlock/JSON content in the DOM at all until opened", async () => {
+test("JSON payloads stay unmounted until both their row and payload are expanded", async () => {
   const { container, root } = await mountPanel({ steps: [RUN_LONGER] });
 
   const closedHtml = container.innerHTML;
-  assert.doesNotMatch(closedHtml, /w6w-code-block/, "no CodeBlock should mount while collapsed");
+  assert.doesNotMatch(
+    closedHtml,
+    /w6w-result-viewer/,
+    "no JSON viewer should mount while collapsed",
+  );
   assert.doesNotMatch(
     closedHtml,
     /a@example\.com/,
@@ -335,12 +364,15 @@ test("A5/M2 — a collapsed row renders no CodeBlock/JSON content in the DOM at 
   );
 
   await openDetailsAt(container, 0);
+  assert.equal(container.querySelector(".w6w-result-viewer"), null);
+  await openPayload(container, "Input");
+  await openPayload(container, "Output");
   const openHtml = container.innerHTML;
   await act(async () => {
     root.unmount();
   });
 
-  assert.match(openHtml, /w6w-code-block/, "CodeBlock must mount once the row is opened");
+  assert.match(openHtml, /w6w-result-viewer/, "the JSON viewer mounts when expanded");
   assert.match(openHtml, /a@example\.com/, "the input value must appear once opened");
   assert.match(openHtml, /abc123/, "the output value must appear once opened");
 });
@@ -517,14 +549,15 @@ test("E2 — a failed step with input keeps its <details>, and shows the error w
   assert.doesNotMatch(html, /w6w-code-block/, "Input stays lazy — no CodeBlock while collapsed");
 });
 
-test("E3 — opening that row mounts Input and does not duplicate the error", async () => {
+test("E3 — opening a failed row's Input does not duplicate the error", async () => {
   const { container, root } = await mountPanel({ steps: [FAILED_WITH_INPUT] });
   await openDetailsAt(container, 0);
+  await openPayload(container, "Input");
   const html = container.innerHTML;
   await act(async () => {
     root.unmount();
   });
-  assert.match(html, /w6w-code-block/, "Input must render once opened");
+  assert.match(html, /w6w-result-viewer/, "Input must render once opened");
   assert.equal(count(html, "boom-one"), 1, `the error must appear exactly once: ${html}`);
 });
 

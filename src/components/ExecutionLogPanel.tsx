@@ -6,6 +6,7 @@ import { conditionOperatorLabel } from "../condition-editor.ts";
 import { internalNodeDef } from "../flow-types.ts";
 import type { StepMeta } from "../provider.tsx";
 import { IconButton } from "./IconButton.tsx";
+import { ResultViewer } from "./ResultViewer.tsx";
 import { StepStatusPill } from "./StepStatusPill.tsx";
 import type { SkipReason, StepStatus } from "./StepStatusPill.tsx";
 
@@ -537,29 +538,32 @@ function formatElapsed(startedAt: string, finishedAt: string): string | null {
   return `${minutes}m ${seconds}s`;
 }
 
-/**
- * Input/output as read-only, syntax-highlighted JSON — `CodeBlock`, not
- * `JsonEditor`: per `CodeBlock.tsx`'s own doc comment, `JsonEditor` mounts a
- * CodeMirror instance to *edit* text, "heavy and semantically wrong for a
- * snippet nobody types into" — exactly this row's read-only value, rendered
- * potentially many times over a whole run. `ResolvedParams.tsx` doesn't fit
- * either: it renders a *schema* (`ActionParam[]`) against resolved values,
- * and this panel has no param schema, only the already-resolved input/output
- * values themselves (see the file header's "host maps `RunState`" note).
- * Never a plain `<pre>` dump: `CodeBlock` is this library's own read-only
- * structured-code idiom (highlighting, copy affordance, `--w6w-code-*`
- * tokens), the thing `<pre>` is not.
- */
+/** Each payload starts collapsed and mounts its read-only JSON tree on demand.
+ * The shared viewer provides key folding, Expand/Collapse all and full-value copy.
+ * Force JSON so an output string stays a string, even when it contains HTML or JSON text. */
 function ExecutionLogJson({ title, value }: { title: string; value: unknown }) {
-  return (
-    <div className="w6w-execution-log-json w6w-stack">
-      <strong className="w6w-small">{title}</strong>
-      {value === undefined ? (
+  const [open, setOpen] = useState(false);
+  if (value === undefined) {
+    return (
+      <div className="w6w-execution-log-json w6w-stack">
+        <strong className="w6w-small">{title}</strong>
         <p className="w6w-muted w6w-small">Not available.</p>
-      ) : (
-        <CodeBlock code={JSON.stringify(value, null, 2)} language="json" />
-      )}
-    </div>
+      </div>
+    );
+  }
+  return (
+    <details
+      className="w6w-execution-log-json"
+      open={open}
+      onToggle={(e) => {
+        if (e.target === e.currentTarget) setOpen(e.currentTarget.open);
+      }}
+    >
+      <summary>
+        <strong className="w6w-small">{title}</strong>
+      </summary>
+      {open && <ResultViewer value={value} format="json" />}
+    </details>
   );
 }
 

@@ -111,5 +111,11 @@ test("a constant chip saves as `const.<name>`", async () => {
   await act(async () => {
     btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
+  assert.equal(onSaveCalls.length, 0);
+  await act(async () => {
+    container
+      .querySelector('[data-testid="expr-save"]')
+      ?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  });
   assert.deepEqual(onSaveCalls[0], "{{ const.account_id }}");
 });

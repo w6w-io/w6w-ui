@@ -202,6 +202,14 @@
 
 .w6w-execution-log-json {
   min-width: 0;
+
+  > summary {
+    cursor: pointer;
+  }
+
+  > .w6w-result-viewer {
+    margin-top: var(--w6w-sp-2);
+  }
 }
 
 /* Error blocks (step `error`, run `runError`/`stepErrors`). The box itself is

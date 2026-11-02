@@ -162,14 +162,17 @@ test("M1 - composed projection, before any test: exactly one Metadata group, for
   const m = await mountModal({ options: { steps }, onSave: (v) => saved.push(v) });
   await click(toggles(m.container)[0]);
   await click(leafBtn(m.container, 0));
+  assert.deepEqual(saved, []);
+  await click(m.container.querySelector('[data-testid="expr-save"]') as Element);
   assert.deepEqual(saved, ["{{ nodes.ev.meta.app }}"]);
 });
 
 for (const [i, k] of KEYS.entries()) {
-  test(`M2 - clicking the ${k} leaf saves nodes.ev.meta.${k}`, async () => {
+  test(`M2 - picking the ${k} leaf then Save saves nodes.ev.meta.${k}`, async () => {
     const { container, onSaveCalls } = await mountExt();
     await click(toggles(container)[0]);
     await click(leafBtn(container, i));
+    await click(container.querySelector('[data-testid="expr-save"]') as Element);
     assert.deepEqual(onSaveCalls, [`{{ nodes.ev.meta.${k} }}`]);
   });
   test(`M3 - the copy icon on the ${k} leaf inserts a chip with that ref`, async () => {

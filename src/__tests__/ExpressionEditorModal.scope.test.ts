@@ -260,6 +260,7 @@ test("Metadata lists every node, other paths included, with its static meta and 
     (b) => b.textContent === "·url",
   ) as HTMLElement;
   await click(url);
+  await click(container.querySelector('[data-testid="expr-save"]') as Element);
   assert.deepEqual(saved, ["{{ nodes.eb_webhook.meta.config.url }}"]);
 });
 
